@@ -8,6 +8,7 @@
 #include <rdebug/src/symbols_types.h>
 
 #include <string.h>
+#include <stdio.h>	// sprintf
 
 #if RTM_PLATFORM_WINDOWS
 #define WIN32_LEAN_AND_MEAN
