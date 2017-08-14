@@ -21,7 +21,11 @@ rtm build system scirpts (https://github.com/milostosic/build):
 
 	git clone https://github.com/milostosic/build.git
 
-DIA (Debug Interface Access) SDK - Windows only
+rbase library (https://github.com/milostosic/rbase):
+
+	git clone https://github.com/milostosic/rbase.git
+
+DIA (Debug Interface Access) SDK - **Windows only**
 
 	git clone https://github.com/milostosic/DIA.git
 
