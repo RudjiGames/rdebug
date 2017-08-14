@@ -1,0 +1,22 @@
+shallow_clone: true
+
+os:
+  - Visual Studio 2017
+
+environment:
+  matrix:
+  - TOOLSET: vs2015
+  - TOOLSET: vs2017
+
+configuration:
+  - Debug
+  - Release
+  - Retail
+
+install:
+  - git clone --depth 1 https://github.com/milostosic/build ..\build
+  - git clone --depth 1 https://github.com/milostosic/DIA ..\DIA
+  - ..\build\tools\windows\genie --file=genie\genie.lua %TOOLSET%
+
+build:
+  project: ../.build/windows/$(TOOLSET)/projects/rdebug/rdebug.sln
