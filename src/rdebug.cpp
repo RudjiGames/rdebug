@@ -6,7 +6,6 @@
 #include <rdebug_pch.h>
 
 #define RTM_LIBHANDLER_DEFINE
-#define RBASE_NAMESPACE rdebug
 #include <rbase/inc/libhandler.h>
 
 namespace rdebug {
