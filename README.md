@@ -17,12 +17,9 @@ You can get the latest source code by cloning it from github:
 Dependencies
 ======
 
-rtm build system scirpts (https://github.com/milostosic/build):
+Dependencies can be obtained by cloning the following repositories:
 
 	git clone https://github.com/milostosic/build.git
-
-rbase library (https://github.com/milostosic/rbase):
-
 	git clone https://github.com/milostosic/rbase.git
 
 DIA (Debug Interface Access) SDK - **Windows only**
