@@ -29,7 +29,7 @@ void SymbolMap::addSymbol(const Symbol& _sym)
 		}
 	}
 
-	m_symbols.emplace_back(_sym);
+	m_symbols.push_back(_sym);
 }
 
 Symbol* SymbolMap::findSymbol(uint64_t _address)
@@ -67,12 +67,12 @@ Symbol* SymbolMap::findSymbol(uint64_t _address)
 	return 0;
 }
 
-static inline bool sortSymbols(Symbol& _s1, Symbol& _s2)
+static inline bool sortSymbols(const Symbol& _s1, const Symbol& _s2)
 {
 	return (_s1.m_offset < _s2.m_offset);
 }
 
-static inline bool isInvalid( Symbol& _sym )
+static inline bool isInvalid(const Symbol& _sym)
 {
 	return _sym.m_size == 0;
 }
