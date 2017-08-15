@@ -46,7 +46,7 @@ Symbol* SymbolMap::findSymbol(uint64_t _address)
 		size_t midx = (sidx + eidx) / 2;
 		Symbol& sym = m_symbols[midx];
 
-		if (sym.m_offset < _address)
+		if (sym.m_offset < (int64_t)_address)
 			sidx = midx;
 		else
 			eidx = midx;
@@ -54,10 +54,11 @@ Symbol* SymbolMap::findSymbol(uint64_t _address)
 		if (eidx-sidx == 1)
 		{
 			sym = m_symbols[sidx];
-			if ((sym.m_offset >= _address) || (sym.m_offset + sym.m_size < _address)) // is this check needed?
+
+			if (uint64_t(_address - sym.m_offset) >= sym.m_size)
 			{
 				sym = m_symbols[eidx];
-				if ((sym.m_offset >= _address) || (sym.m_offset + sym.m_size < _address))
+				if (uint64_t(_address - sym.m_offset) >= sym.m_size)
 					return 0;
 			}
 
@@ -69,7 +70,7 @@ Symbol* SymbolMap::findSymbol(uint64_t _address)
 
 static inline bool sortSymbols(const Symbol& _s1, const Symbol& _s2)
 {
-	return (_s1.m_offset < _s2.m_offset);
+	return _s1.m_offset < _s2.m_offset;
 }
 
 static inline bool isInvalid(const Symbol& _sym)
@@ -92,7 +93,7 @@ void SymbolMap::sort()
 		if (sym.m_size == 0)
 		{
 			Symbol& nextSym = *(it+1);
-			sym.m_size = uint64_t(nextSym.m_offset - sym.m_offset);
+			sym.m_size = nextSym.m_offset - 1;
 		}
 		++it;
 	}

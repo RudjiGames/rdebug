@@ -214,7 +214,6 @@ void parseSymbolMapLineGNU(char* _line, SymbolMap& _symMap)
 
 	uint64_t size = 0;
 	parseHex(size, _line);
-	sym.m_size = size;
 
 	char type = _line[0];
 	++_line;
@@ -223,7 +222,8 @@ void parseSymbolMapLineGNU(char* _line, SymbolMap& _symMap)
 		return;
 
 	parseSym(sym.m_name, _line);
-	sym.m_offset = (uint32_t)offset;
+	sym.m_offset	= offset;
+	sym.m_size			= size;
 	
 	parseFile(sym.m_file, sym.m_line, _line);
 
