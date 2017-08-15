@@ -1,11 +1,12 @@
 //--------------------------------------------------------------------------//
-/// Copyright (c) 2010-2017 Milos Tosic. All Rights Reserved.              ///
+/// Copyright (c) 2017 by Milos Tosic. All Rights Reserved.                /// 
 /// License: http://www.opensource.org/licenses/BSD-2-Clause               ///
 //--------------------------------------------------------------------------//
 
 #include <rdebug_pch.h>
 #include <rdebug/src/pdb_file.h>
 #include <rdebug/src/symbols_types.h>
+#include <rbase/inc/winchar.h>
 
 #include <string.h>
 #include <stdio.h>	// sprintf
@@ -34,11 +35,25 @@ namespace rdebug {
 	bool findSymbol(const char* _path, char _outSymbolPath[1024], const char* _symbolStore);
 }
 
-const char* getFileName(const char* _path)
+static inline const char* getFileName(const char* _path)
 {
 	size_t len = strlen(_path);
 	while ((_path[len] != '/') && (_path[len] != '\\') && (len>0)) --len;
 	return &_path[len + 1];
+}
+
+static inline const char* pathGetExt(const char* _path)
+{
+	size_t len = strlen(_path);
+
+	while (--len)
+		if (_path[len] == '.')
+			break;
+
+	if (_path[len++] == '.')
+		return &_path[len];
+
+	return 0;
 }
 
 namespace rdebug {
@@ -49,13 +64,38 @@ void parsePlayStationSymbolInfo(char* _str, StackFrame& _frame);
 void parseSymbolMapGNU(std::string& _buffer, SymbolMap& _symMap);
 void parseSymbolMapPS3(std::string& _buffer, SymbolMap& _symMap);
 
-uintptr_t symbolResolverCreate(ModuleInfo* _moduleInfos, uint32_t _numInfos, Toolchain& _tc, const char* _executablePath)
+uintptr_t symbolResolverCreate(ModuleInfo* _moduleInfos, uint32_t _numInfos, Toolchain* _tc)
 {
-	ResolveInfo* info = new ResolveInfo();
-	
+	RTM_ASSERT(_moduleInfos, "Module info array can't be NULL");
+	RTM_ASSERT(_tc, "Toolchain description can't be NULL");
+
+	ResolveInfo* info = rtm_new<ResolveInfo>();
+	const char* _executablePath = 0;
+
+	for (uint32_t i=0; i<_numInfos; ++i)
+	{
+		Module module;
+		module.m_module		= _moduleInfos[i];
+		module.m_moduleName	= getFileName(module.m_module.m_modulePath);
+
+		char tmpName[1024];
+		strcpy(tmpName, module.m_moduleName); 
+		rtm::strToUpper(tmpName);
+
+		if ((strcmp(tmpName,"MTUNERDLL32.DLL") == 0) || (strcmp(tmpName,"MTUNERDLL64.DLL") == 0))
+			module.m_isRTMdll = true;
+
+		const char* ext = pathGetExt(tmpName);
+		if (ext && 
+			((strcmp(ext, "EXE") == 0) || (strcmp(ext, "ELF") == 0)))
+			_executablePath = _moduleInfos[i].m_modulePath;
+
+		info->m_modules.push_back(module);
+	}
+
 	info->m_executablePath	= info->scratch(_executablePath);
 	info->m_executableName	= getFileName(info->m_executablePath);
-	info->m_tc_type			= _tc.m_type;
+	info->m_tc_type			= _tc->m_type;
 
 	// nm				-C --print-size --numeric-sort --line-numbers [SYMBOL]
 	// addr2line		-f -C -e [SYMBOL] 0xAddress
@@ -71,7 +111,7 @@ uintptr_t symbolResolverCreate(ModuleInfo* _moduleInfos, uint32_t _numInfos, Too
 	std::string append_a2l;
 	std::string append_cppf;
 
-	if (_tc.m_type == rdebug::Toolchain::TC_GCC)
+	if (_tc->m_type == rdebug::Toolchain::TC_GCC)
 	{
 		append_nm	= "\" -C --print-size --numeric-sort --line-numbers \"";
 		append_nm	+= _executablePath;
@@ -85,7 +125,7 @@ uintptr_t symbolResolverCreate(ModuleInfo* _moduleInfos, uint32_t _numInfos, Too
 		append_cppf	= "\" -t -n ";
 	}
 
-	if (_tc.m_type == rdebug::Toolchain::TC_PS3SNC)
+	if (_tc->m_type == rdebug::Toolchain::TC_PS3SNC)
 	{
 		append_nm	= "\" -dsy \"";
 		append_nm	+= _executablePath;
@@ -107,12 +147,12 @@ uintptr_t symbolResolverCreate(ModuleInfo* _moduleInfos, uint32_t _numInfos, Too
 
 	std::string quote("\"");
 
-	switch (_tc.m_type)
+	switch (_tc->m_type)
 	{
 		case rdebug::Toolchain::TC_MSVC:
 			info->m_parseSym		= 0;
 			info->m_parseSymMap		= 0;
-			info->m_symbolStore		= info->scratch( _tc.m_toolchainPath );
+			info->m_symbolStore		= info->scratch( _tc->m_toolchainPath );
 			info->m_tc_addr2line	= 0;
 			info->m_tc_nm			= 0;
 			info->m_tc_cppfilt		= 0;
@@ -122,39 +162,20 @@ uintptr_t symbolResolverCreate(ModuleInfo* _moduleInfos, uint32_t _numInfos, Too
 			info->m_parseSym		= parseAddr2LineSymbolInfo;
 			info->m_parseSymMap		= parseSymbolMapGNU;
 			info->m_symbolStore		= 0;
-			info->m_tc_addr2line	= info->scratch( (quote + _tc.m_toolchainPath + _tc.m_toolchainPrefix + "addr2line" + append_a2l).c_str() );
-			info->m_tc_nm			= info->scratch( (quote + _tc.m_toolchainPath + _tc.m_toolchainPrefix + "nm" + append_nm).c_str() );
-			info->m_tc_cppfilt		= info->scratch( (quote + _tc.m_toolchainPath + _tc.m_toolchainPrefix + "c++filt" + append_cppf).c_str() );
+			info->m_tc_addr2line	= info->scratch( (quote + _tc->m_toolchainPath + _tc->m_toolchainPrefix + "addr2line" + append_a2l).c_str() );
+			info->m_tc_nm			= info->scratch( (quote + _tc->m_toolchainPath + _tc->m_toolchainPrefix + "nm" + append_nm).c_str() );
+			info->m_tc_cppfilt		= info->scratch( (quote + _tc->m_toolchainPath + _tc->m_toolchainPrefix + "c++filt" + append_cppf).c_str() );
 			break;
 
 		case rdebug::Toolchain::TC_PS3SNC:
 			info->m_parseSym		= parsePlayStationSymbolInfo;
 			info->m_parseSymMap		= parseSymbolMapPS3;
 			info->m_symbolStore		= 0;
-			info->m_tc_addr2line	= info->scratch( (quote + _tc.m_toolchainPath + _tc.m_toolchainPrefix + "ps3bin" + append_a2l).c_str() );
-			info->m_tc_nm			= info->scratch( (quote + _tc.m_toolchainPath + _tc.m_toolchainPrefix + "ps3bin" + append_nm).c_str() );
-			info->m_tc_cppfilt		= info->scratch( (quote + _tc.m_toolchainPath + _tc.m_toolchainPrefix + "ps3name" + append_cppf).c_str() );
+			info->m_tc_addr2line	= info->scratch( (quote + _tc->m_toolchainPath + _tc->m_toolchainPrefix + "ps3bin" + append_a2l).c_str() );
+			info->m_tc_nm			= info->scratch( (quote + _tc->m_toolchainPath + _tc->m_toolchainPrefix + "ps3bin" + append_nm).c_str() );
+			info->m_tc_cppfilt		= info->scratch( (quote + _tc->m_toolchainPath + _tc->m_toolchainPrefix + "ps3name" + append_cppf).c_str() );
 			break;
 	};
-
-	for (uint32_t i=0; i<_numInfos; ++i)
-	{
-		Module module;
-		module.m_module		= _moduleInfos[i];
-		module.m_moduleName	= getFileName(module.m_module.m_modulePath);
-
-		if (!((strcmp(module.m_module.m_modulePath, _executablePath) == 0) && (_tc.m_type != rdebug::Toolchain::TC_MSVC)))
-		{
-			char tmpName[1024];
-			strcpy(tmpName, module.m_moduleName); 
-			rtm::strToUpper(tmpName);
-
-			if ((strcmp(tmpName,"MTUNERDLL32.DLL") == 0) || (strcmp(tmpName,"MTUNERDLL64.DLL") == 0))
-				module.m_isRTMdll = true;
-
-			info->m_modules.push_back(module);
-		}
-	}
 
 	return (uintptr_t)info;
 }
@@ -162,7 +183,7 @@ uintptr_t symbolResolverCreate(ModuleInfo* _moduleInfos, uint32_t _numInfos, Too
 uintptr_t symbolResolverCreateForCurrentProcess()
 {
 #if RTM_PLATFORM_WINDOWS
-	ResolveInfo* info = new ResolveInfo();
+	ResolveInfo* info = rtm_new<ResolveInfo>();
 
 	//uint32_t buffPtr = 0;
 
@@ -231,12 +252,12 @@ void symbolResolverDelete(uintptr_t _resolver)
 {
 	ResolveInfo* info = (ResolveInfo*)_resolver;
 	if (info)
-		delete info;
+		rtm_delete<ResolveInfo>(info);
 }
 
 ResolveInfo::ResolveInfo()
 {
-	m_scratch			= new char[SCRATCH_MEM_SIZE];
+	m_scratch			= (char*)rtm_alloc(sizeof(char) *  SCRATCH_MEM_SIZE);
 	m_scratchPos		= 0;
 	m_tc_addr2line		= "";
 	m_tc_nm				= "";
@@ -253,9 +274,9 @@ ResolveInfo::~ResolveInfo()
 #if RTM_PLATFORM_WINDOWS
 	for (uint32_t i = 0; i < m_modules.size(); ++i)
 		if (m_modules[i].m_PDBFile)
-			delete m_modules[i].m_PDBFile;
+			rtm_delete<PDBFile>(m_modules[i].m_PDBFile);
 #endif // RTM_PLATFORM_WINDOWS
-	delete m_scratch;
+	rtm_free(m_scratch);
 }
 
 char* ResolveInfo::scratch(const char* _str)
@@ -444,7 +465,7 @@ void loadPDB(Module& _module, const char* _symbolStore)
 {
 	if (!_module.m_PDBFile)
 	{
-		_module.m_PDBFile = new PDBFile();
+		_module.m_PDBFile = rtm_new<PDBFile>();
 		char symbolPath[1024];
 		strcpy(symbolPath, "");
 		findSymbol(_module.m_module.m_modulePath, symbolPath, _symbolStore);
@@ -519,9 +540,11 @@ void symbolResolverGetFrame(uintptr_t _resolver, uint64_t _address, StackFrame& 
 	}
 }
 
-uint64_t symbolResolverGetAddressID(uintptr_t _resolver, uint64_t _address, bool& _isRTMdll)
+uint64_t symbolResolverGetAddressID(uintptr_t _resolver, uint64_t _address, bool* _isRTMdll)
 {
-	_isRTMdll = false;
+	if (_isRTMdll)
+		*_isRTMdll = false;
+
 	ResolveInfo* info = (ResolveInfo*)_resolver;
 	if (!info)
 		return 0;
@@ -534,7 +557,8 @@ uint64_t symbolResolverGetAddressID(uintptr_t _resolver, uint64_t _address, bool
 			Module& module = info->m_modules[i];
 			loadPDB(module, info->m_symbolStore);
 			uintptr_t id = module.m_PDBFile->getSymbolID(_address - module.m_module.m_baseAddress);
-			_isRTMdll = module.m_isRTMdll;
+			if (_isRTMdll)
+				*_isRTMdll = module.m_isRTMdll;
 			return (id == 0) ? _address : id + module.m_module.m_baseAddress;
 		}
 	}

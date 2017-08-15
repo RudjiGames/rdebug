@@ -10,6 +10,7 @@
 
 namespace rdebug {
 
+	/// Toolchain description structure
 	struct Toolchain
 	{
 		enum Type
@@ -24,6 +25,7 @@ namespace rdebug {
 		const char*		m_toolchainPrefix;
 	};
 
+	/// Module information structure
 	struct ModuleInfo
 	{
 		uint64_t		m_baseAddress;
@@ -37,6 +39,7 @@ namespace rdebug {
 		}
 	};
 
+	/// Single entry (frame) in stack trace
 	struct StackFrame
 	{
 		char		m_moduleName[256];
@@ -45,11 +48,49 @@ namespace rdebug {
 		uint32_t	m_line;
 	};
 
-	uintptr_t	symbolResolverCreate(ModuleInfo* _moduleInfos, uint32_t _numInfos, Toolchain& _tc, const char* _executablePath);
+	/// Initialize rdebug library
+	///
+	/// @param _libInterface
+	///
+	bool init(rtm::LibInterface* _libInterface = nullptr);
+
+	/// Shut down rdebug library and release internal resources
+	///
+	void shutDown(); 
+
+	/// Creates debug symbol resolver based on 
+	///
+	/// @param _moduleInfos
+	/// @param _numInfos
+	/// @param _tc
+	///
+	uintptr_t	symbolResolverCreate(ModuleInfo* _moduleInfos, uint32_t _numInfos, Toolchain* _tc);
+
+	/// Creates debug symbol resolver based on 
+	///
 	uintptr_t	symbolResolverCreateForCurrentProcess();
+
+	/// Creates debug symbol resolver based on 
+	///
+	/// @param _resolver
+	///
 	void		symbolResolverDelete(uintptr_t _resolver);
+
+	/// Creates debug symbol resolver based on 
+	///
+	/// @param _resolver
+	/// @param _address
+	/// @param _frame
+	///
 	void		symbolResolverGetFrame(uintptr_t _resolver, uint64_t _address, StackFrame& _frame);
-	uint64_t	symbolResolverGetAddressID(uintptr_t _resolver, uint64_t _address, bool& _isRTMdll);
+
+	/// Creates debug symbol resolver based on 
+	///
+	/// @param _resolver
+	/// @param _address
+	/// @param _executablePath
+	///
+	uint64_t	symbolResolverGetAddressID(uintptr_t _resolver, uint64_t _address, bool* _isRTMdll = 0);
 	
 } // namespace rdebug
 

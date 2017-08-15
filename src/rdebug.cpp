@@ -3,15 +3,25 @@
 /// License: http://www.opensource.org/licenses/BSD-2-Clause               ///
 //--------------------------------------------------------------------------//
 
-#ifndef __RTM_TOOLUTIL_TOOLUTIL_PCH_H__
-#define __RTM_TOOLUTIL_TOOLUTIL_PCH_H__
+#include <rdebug_pch.h>
 
+#define RTM_LIBHANDLER_DEFINE
 #define RBASE_NAMESPACE rdebug
-
-#include <rbase/inc/platform.h>
-#include <rbase/inc/strings.h>
-#include <rbase/inc/winchar.h>
 #include <rbase/inc/libhandler.h>
 
-#endif // __RTM_TOOLUTIL_TOOLUTIL_PCH_H__
+namespace rdebug {
+
+bool init(rtm::LibInterface* _libInterface)
+{
+	g_allocator		= _libInterface ? _libInterface->m_memory : 0;
+	g_errorHandler	= _libInterface ? _libInterface->m_error  : 0;
+
+	return false;
+}
+
+void shutDown()
+{
+}
+
+} // namespace rdebug
 
