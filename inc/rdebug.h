@@ -52,7 +52,7 @@ namespace rdebug {
 	///
 	/// @param _libInterface
 	///
-	bool init(rtm::LibInterface* _libInterface = nullptr);
+	bool init(rtm::LibInterface* _libInterface = 0);
 
 	/// Shut down rdebug library and release internal resources
 	///
