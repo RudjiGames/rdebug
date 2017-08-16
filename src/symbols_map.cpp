@@ -11,8 +11,8 @@
 namespace rdebug {
 
 Symbol::Symbol() :
-	m_size(0),
 	m_offset(0),
+	m_size(0),
 	m_line(0)
 {
 }
