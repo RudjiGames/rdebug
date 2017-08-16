@@ -92,6 +92,27 @@ namespace rdebug {
 	///
 	uint64_t	symbolResolverGetAddressID(uintptr_t _resolver, uint64_t _address, bool* _isRTMdll = 0);
 	
+	/// Returns true if binary at the given path is 64bit
+	///
+	/// @param _path
+	///
+	bool		processIs64bitBinary(const char* _path);
+
+	/// Creates and runs a new process with injected DLL
+	///
+	/// @param _executablePath
+	/// @param _DLLPath
+	/// @param _cmdLine
+	/// @param _workingDir
+	///
+	bool		processInjectDLL(const char* _executablePath, const char* _DLLPath, const char* _cmdLine, const char* _workingDir);
+
+	/// Create and run a new process given the command line
+	///
+	/// @param _cmdLine
+	///
+	bool		processRun(const char* _cmdLine);
+
 } // namespace rdebug
 
 #endif // __RTM_DEBUG_H__
