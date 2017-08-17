@@ -82,7 +82,7 @@ namespace rdebug {
 	/// @param _address
 	/// @param _frame
 	///
-	void		symbolResolverGetFrame(uintptr_t _resolver, uint64_t _address, StackFrame& _frame);
+	void		symbolResolverGetFrame(uintptr_t _resolver, uint64_t _address, StackFrame* _frame);
 
 	/// Creates debug symbol resolver based on 
 	///
@@ -112,6 +112,18 @@ namespace rdebug {
 	/// @param _cmdLine
 	///
 	bool		processRun(const char* _cmdLine);
+
+	/// Run a new process and return the console output
+	///
+	/// @param _cmdLine
+	///
+	char*		processGetOutputOf(const char* _cmdLine, bool _redirectIO = false);
+
+	/// Release memory previously allocated by processGetOutputOf
+	///
+	/// @param _cmdLine
+	///
+	void		processReleaseOutput(const char* _output);
 
 } // namespace rdebug
 

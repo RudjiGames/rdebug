@@ -6,10 +6,6 @@
 #include <rdebug_pch.h>
 #include <rdebug/src/pdb_file.h>
 #include <rdebug/src/symbols_types.h>
-#include <rbase/inc/winchar.h>
-
-#include <string.h>
-#include <stdio.h>	// sprintf
 
 #if RTM_PLATFORM_WINDOWS
 #define WIN32_LEAN_AND_MEAN
@@ -61,8 +57,8 @@ namespace rdebug {
 void parseAddr2LineSymbolInfo(char* _str, StackFrame& _frame);
 void parsePlayStationSymbolInfo(char* _str, StackFrame& _frame);
 
-void parseSymbolMapGNU(std::string& _buffer, SymbolMap& _symMap);
-void parseSymbolMapPS3(std::string& _buffer, SymbolMap& _symMap);
+void parseSymbolMapGNU(char*  _buffer, SymbolMap& _symMap);
+void parseSymbolMapPS3(char*  _buffer, SymbolMap& _symMap);
 
 uintptr_t symbolResolverCreate(ModuleInfo* _moduleInfos, uint32_t _numInfos, Toolchain* _tc)
 {
@@ -344,123 +340,6 @@ class DiaLoadCallBack : public IDiaLoadCallback2
     HRESULT STDMETHODCALLTYPE RestrictSystemRootAccess() { return S_OK; }
 };
 
-HANDLE g_hChildStd_IN_Rd = NULL;
-HANDLE g_hChildStd_IN_Wr = NULL;
-HANDLE g_hChildStd_OUT_Rd = NULL;
-HANDLE g_hChildStd_OUT_Wr = NULL;
-
-BOOL createChildProcess(char* _cmdLine)
-{
-	PROCESS_INFORMATION piProcInfo; 
-	STARTUPINFOW siStartInfo;
-	BOOL bSuccess = FALSE; 
- 
-	ZeroMemory( &piProcInfo, sizeof(PROCESS_INFORMATION) );
-
-	ZeroMemory( &siStartInfo, sizeof(STARTUPINFOW) );
-	siStartInfo.cb = sizeof(STARTUPINFOW); 
-	siStartInfo.hStdError = g_hChildStd_OUT_Wr;
-	siStartInfo.hStdOutput = g_hChildStd_OUT_Wr;
-	siStartInfo.hStdInput = g_hChildStd_IN_Rd;
-	siStartInfo.dwFlags |= STARTF_USESTDHANDLES | STARTF_USESHOWWINDOW;
-	siStartInfo.wShowWindow = SW_HIDE;
- 
-	rtm::MultiToWide cmdLine(_cmdLine);
-	bSuccess = CreateProcessW(NULL, cmdLine.m_ptr, NULL, NULL, TRUE, 0, NULL, NULL, &siStartInfo, &piProcInfo);  
-
-	if (bSuccess) 
-	{
-		HANDLE h[2];
-		h[0] = piProcInfo.hThread;
-		h[1] = piProcInfo.hProcess;
-		WaitForMultipleObjects(2,h,TRUE,999);
-		CloseHandle(piProcInfo.hThread);
-		CloseHandle(piProcInfo.hProcess);
-	}
-	return bSuccess;
-}
-
-void CreatePipes()
-{
-	SECURITY_ATTRIBUTES saAttr; 
- 
-	saAttr.nLength = sizeof(SECURITY_ATTRIBUTES); 
-	saAttr.bInheritHandle = TRUE;
-	saAttr.lpSecurityDescriptor = NULL; 
-
-	CreatePipe(&g_hChildStd_OUT_Rd, &g_hChildStd_OUT_Wr, &saAttr, 4096*160);
-	SetHandleInformation(g_hChildStd_OUT_Rd, HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT);
-
-	saAttr.nLength = sizeof(SECURITY_ATTRIBUTES); 
-	saAttr.bInheritHandle = TRUE;
-	saAttr.lpSecurityDescriptor = NULL; 
-
-	CreatePipe(&g_hChildStd_IN_Rd, &g_hChildStd_IN_Wr, &saAttr, 4096*160);
-	SetHandleInformation(g_hChildStd_IN_Wr, HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT);
-}
-
-DWORD ReadFromPipe(std::string& _buffer)
-{ 
-	DWORD dwRead;
-	BOOL bSuccess = FALSE;
-	HANDLE hParentStdOut = GetStdHandle(STD_OUTPUT_HANDLE);
-
-	char	utf8buffer[8192+1];
-	for (;;) 
-	{ 
-		bSuccess = ReadFile(g_hChildStd_OUT_Rd, utf8buffer, 8192, &dwRead, NULL);
-		if (!bSuccess)
-			break;
-
-		utf8buffer[dwRead] = '\0';
-
-		if (dwRead <= 8192*2)
-			_buffer += utf8buffer;
-		else
-			_buffer += '\0';
-
-		if (dwRead < 8192)
-			break;
-	}
-	CloseHandle(hParentStdOut);
-	return dwRead;
-} 
-
-bool getOutputOf(char* _cmdline, std::string& _buffer)
-{
-	CreatePipes();
-
-	BOOL success = createChildProcess(_cmdline);
-	
-	if (!success)
-		return false;
-
-	ReadFromPipe(_buffer);
-
-	CloseHandle(g_hChildStd_IN_Rd);
-	CloseHandle(g_hChildStd_IN_Wr);
-	CloseHandle(g_hChildStd_OUT_Rd);
-	CloseHandle(g_hChildStd_OUT_Wr);
-
-	g_hChildStd_IN_Rd = NULL;
-	g_hChildStd_IN_Wr = NULL;
-	g_hChildStd_OUT_Rd = NULL;
-	g_hChildStd_OUT_Wr = NULL;
-	return true;
-}
-#else // RTM_PLATFORM_WINDOWS
-
-bool getOutputOf(char* _cmdline, std::string& _buffer)
-{
-	RTM_UNUSED(_cmdline);
-	RTM_UNUSED(_buffer);
-	return false;
-}
-
-#endif // RTM_PLATFORM_WINDOWS
-
-
-#if RTM_PLATFORM_WINDOWS
 void loadPDB(Module& _module, const char* _symbolStore)
 {
 	if (!_module.m_PDBFile)
@@ -475,12 +354,12 @@ void loadPDB(Module& _module, const char* _symbolStore)
 }
 #endif // RTM_PLATFORM_WINDOWS
 
-void symbolResolverGetFrame(uintptr_t _resolver, uint64_t _address, StackFrame& _frame)
+void symbolResolverGetFrame(uintptr_t _resolver, uint64_t _address, StackFrame* _frame)
 {
-	_frame.m_moduleName[0] = '\0';
-	_frame.m_file[0] = '\0';
-	_frame.m_func[0] = '\0';
-	_frame.m_line = 0;
+	_frame->m_moduleName[0] = '\0';
+	_frame->m_file[0] = '\0';
+	_frame->m_func[0] = '\0';
+	_frame->m_line = 0;
 
 	ResolveInfo* info = (ResolveInfo*)_resolver;
 	if (!info)
@@ -493,8 +372,8 @@ void symbolResolverGetFrame(uintptr_t _resolver, uint64_t _address, StackFrame& 
 		{
 			Module& module = info->m_modules[i];
 			loadPDB(module, info->m_symbolStore);
-			module.m_PDBFile->getSymbolByAddress(_address - module.m_module.m_baseAddress, _frame);
-			strcpy(_frame.m_moduleName, getFileName(module.m_module.m_modulePath));
+			module.m_PDBFile->getSymbolByAddress(_address - module.m_module.m_baseAddress, *_frame);
+			strcpy(_frame->m_moduleName, getFileName(module.m_module.m_modulePath));
 			return;
 		}
 	}
@@ -502,7 +381,7 @@ void symbolResolverGetFrame(uintptr_t _resolver, uint64_t _address, StackFrame& 
 
 	if (info->m_tc_addr2line && (strlen(info->m_tc_addr2line) != 0))
 	{
-		strcpy(_frame.m_moduleName, info->m_executableName);
+		strcpy(_frame->m_moduleName, info->m_executableName);
 
 		char cmdline[4096 * 2];
 #if RTM_PLATFORM_WINDOWS
@@ -510,32 +389,40 @@ void symbolResolverGetFrame(uintptr_t _resolver, uint64_t _address, StackFrame& 
 #else
 		sprintf(cmdline, /*4096*2,*/ info->m_tc_addr2line, _address - info->m_baseAddress4addr2Line);
 #endif
-		std::string buffer;
-		getOutputOf(cmdline, buffer);
-		info->m_parseSym(&buffer[0], _frame);
+		char* procOut = processGetOutputOf(cmdline);
+		if (procOut)
+		{
+			info->m_parseSym(&procOut[0], *_frame);
+			processReleaseOutput(procOut);
+		}
 
-		if (strcmp(_frame.m_func, "Unknown") != 0)
+		if (strcmp(_frame->m_func, "Unknown") != 0)
 			if (strlen(info->m_tc_cppfilt) != 0)
 			{
 #if RTM_PLATFORM_WINDOWS
-				sprintf_s(cmdline, 4096 * 2, "%s%s", info->m_tc_cppfilt, _frame.m_func);
+				sprintf_s(cmdline, 4096 * 2, "%s%s", info->m_tc_cppfilt, _frame->m_func);
 #else
-				sprintf(cmdline, /*4096 * 2,*/ "%s%s", info->m_tc_cppfilt, _frame.m_func);
+				sprintf(cmdline, /*4096 * 2,*/ "%s%s", info->m_tc_cppfilt, _frame->m_func);
 #endif
-				getOutputOf(cmdline, buffer);
-				size_t len = strlen(buffer.c_str());
-				size_t s = 0;
-				while (s < len)
+				procOut = processGetOutputOf(cmdline);
+				if (procOut)
 				{
-					if ((buffer[s] == '\r') ||
-						(buffer[s] == '\n'))
+					size_t len = strlen(procOut);
+					size_t s = 0;
+					while (s < len)
 					{
-						buffer[s] = 0;
-						break;
+						if ((procOut[s] == '\r') ||
+							(procOut[s] == '\n'))
+						{
+							procOut[s] = 0;
+							break;
+						}
+						++s;
 					}
-					++s;
+					strcpy(_frame->m_func, procOut);
+
+					processReleaseOutput(procOut);
 				}
-				strcpy(_frame.m_func, buffer.c_str());
 			}
 	}
 }
@@ -569,11 +456,15 @@ uint64_t symbolResolverGetAddressID(uintptr_t _resolver, uint64_t _address, bool
 		char cmdline[4096*2];
 		strcpy(cmdline, info->m_tc_nm);
 
-		std::string buffer;
-		getOutputOf(cmdline, buffer);
+		char* procOut = processGetOutputOf(cmdline);
 
-		info->m_parseSymMap(buffer, info->m_symbolMap);
-		info->m_symbolMapInitialized = true;
+		if (procOut)
+		{
+			info->m_parseSymMap(procOut, info->m_symbolMap);
+			info->m_symbolMapInitialized = true;
+
+			processReleaseOutput(procOut);
+		}
 	}
 
 	rdebug::Symbol* sym = info->m_symbolMap.findSymbol(_address);

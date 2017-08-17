@@ -257,9 +257,9 @@ void parseSymbolMapLinePS3SNC(char* _line, SymbolMap& _symMap)
 	_symMap.addSymbol(sym);
 }
 
-void parseSymbolMapGNU(std::string& _buffer, SymbolMap& _symMap)
+void parseSymbolMapGNU(char* _buffer, SymbolMap& _symMap)
 {
-	size_t len = _buffer.size();
+	size_t len = strlen(_buffer);
 	size_t pos = 0;
 
 	while (pos < len)
@@ -278,9 +278,9 @@ void parseSymbolMapGNU(std::string& _buffer, SymbolMap& _symMap)
 	_symMap.sort();
 }
 
-void parseSymbolMapPS3(std::string& _buffer, SymbolMap& _symMap)
+void parseSymbolMapPS3(char* _buffer, SymbolMap& _symMap)
 {
-	size_t len = _buffer.size();
+	size_t len = strlen(_buffer);
 	size_t pos = 0;
 
 	while (pos < len)

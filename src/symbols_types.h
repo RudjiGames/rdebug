@@ -44,7 +44,7 @@ struct ResolveInfo
 	typedef rtm::FixedArray<Module, MAX_MODULES> ModuleArray;
 
 	typedef void (*fnParseSymbol)(char* _buff, StackFrame& _frame);
-	typedef void (*fnParseSymbolMap)(std::string& _buffer, SymbolMap& _symMap);
+	typedef void (*fnParseSymbolMap)(char* _buffer, SymbolMap& _symMap);
 
 	char*				m_scratch;
 	uint32_t			m_scratchPos;

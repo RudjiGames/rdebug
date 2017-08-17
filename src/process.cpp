@@ -16,6 +16,9 @@ namespace rdebug {
 
 #if RTM_PLATFORM_WINDOWS
 
+const char* g_unblockMarker	= "<rtm>";
+const DWORD g_bufferSize	= 4096*160;
+
 bool processIs64bitBinary(const char* _path)
 {
 	rtm::MultiToWide path(_path);
@@ -145,6 +148,185 @@ bool processRun(const char* _cmdLine)
 	return ret;
 }
 
+struct PipeHandles
+{
+	HANDLE m_stdIn_Read;
+	HANDLE m_stdIn_Write;
+	HANDLE m_stdOut_Read;
+	HANDLE m_stdOut_Write;
+
+	PipeHandles()
+	{
+		m_stdIn_Read	= NULL;
+		m_stdIn_Write	= NULL;
+		m_stdOut_Read	= NULL;
+		m_stdOut_Write	= NULL;
+	}
+
+	~PipeHandles()
+	{
+		CloseHandle(m_stdIn_Read);
+		CloseHandle(m_stdIn_Write);
+		CloseHandle(m_stdOut_Read);
+		CloseHandle(m_stdOut_Write);
+	}
+};
+
+void removeMarkers(char* _buffer, char* _outBuffer, DWORD& _outSize)
+{
+	char* origBuff = _outBuffer;
+	char* nextMarker;
+	do
+	{
+		nextMarker = strstr(_buffer, g_unblockMarker);
+		if (nextMarker)
+		{
+			strncpy(_outBuffer, _buffer, nextMarker-_buffer);
+			_outBuffer += nextMarker - _buffer;
+			_buffer = nextMarker + strlen(g_unblockMarker);
+		}
+		else
+		{
+			strcpy(_outBuffer,_buffer);
+		}
+	}
+	while (nextMarker);
+	_outSize = (DWORD)strlen(origBuff);
+}
+
+BOOL createChildProcess(const char* _cmdLine, PipeHandles* _handles, bool _redirectIO)
+{
+	PROCESS_INFORMATION piProcInfo; 
+	STARTUPINFOW siStartInfo;
+	BOOL bSuccess = FALSE; 
+ 
+	ZeroMemory( &piProcInfo, sizeof(PROCESS_INFORMATION) );
+	ZeroMemory( &siStartInfo, sizeof(STARTUPINFOW) );
+	siStartInfo.cb = sizeof(STARTUPINFOW); 
+
+	if (_redirectIO)
+	{
+		siStartInfo.hStdError	= _handles->m_stdOut_Write;
+		siStartInfo.hStdOutput	= _handles->m_stdOut_Write;
+		siStartInfo.hStdInput	= _handles->m_stdIn_Read;
+		siStartInfo.dwFlags		|= STARTF_USESTDHANDLES | STARTF_USESHOWWINDOW;
+		siStartInfo.wShowWindow	= SW_HIDE;
+	}
+
+	rtm::MultiToWide cmdLine(_cmdLine);
+	bSuccess = CreateProcessW(NULL, cmdLine.m_ptr, NULL, NULL, TRUE, 0, NULL, NULL, &siStartInfo, &piProcInfo);  
+
+	if (bSuccess) 
+	{
+		HANDLE h[2];
+		h[0] = piProcInfo.hThread;
+		h[1] = piProcInfo.hProcess;
+
+		DWORD written;
+		string_rtm buffer, wbuffer;
+		buffer.reserve(g_bufferSize);
+		wbuffer.reserve(g_bufferSize);
+		HANDLE out = GetStdHandle(STD_OUTPUT_HANDLE); 
+		
+		for (;;)
+		{
+			bool stillRunning = (WaitForSingleObject(piProcInfo.hProcess,0) == WAIT_TIMEOUT);
+			
+			DWORD dwRead = 0;
+			DWORD w;
+			WriteFile(_handles->m_stdOut_Write, g_unblockMarker, (DWORD)strlen(g_unblockMarker), &w, NULL);
+			if ((w==4) && ReadFile(_handles->m_stdOut_Read, &buffer[0], g_bufferSize, &dwRead, NULL))
+			{
+				buffer[dwRead] = '\0';
+				removeMarkers(&buffer[0], &wbuffer[0], dwRead);
+				WriteFile(out, &wbuffer[0], dwRead, &written, NULL);
+			}
+			
+			if (!stillRunning)
+				break;
+		}
+
+		WaitForMultipleObjects(2,h,TRUE,999);
+		CloseHandle(piProcInfo.hThread);
+		CloseHandle(piProcInfo.hProcess);
+	}
+	return bSuccess;
+}
+
+void CreatePipes(PipeHandles* _handles)
+{
+	SECURITY_ATTRIBUTES saAttr; 
+ 
+	saAttr.nLength				= sizeof(SECURITY_ATTRIBUTES); 
+	saAttr.bInheritHandle		= TRUE;
+	saAttr.lpSecurityDescriptor	= NULL; 
+
+	CreatePipe(&_handles->m_stdOut_Read, &_handles->m_stdOut_Write, &saAttr, 4096*160);
+	SetHandleInformation(_handles->m_stdOut_Read, HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT);
+
+	saAttr.nLength				= sizeof(SECURITY_ATTRIBUTES); 
+	saAttr.bInheritHandle		= TRUE;
+	saAttr.lpSecurityDescriptor	= NULL; 
+
+	CreatePipe(&_handles->m_stdIn_Read, &_handles->m_stdIn_Write, &saAttr, 4096*160);
+	SetHandleInformation(_handles->m_stdIn_Write, HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT);
+}
+
+DWORD ReadFromPipe(string_rtm& _buffer, PipeHandles* _handles)
+{ 
+	DWORD dwRead;
+	BOOL bSuccess = FALSE;
+	HANDLE hParentStdOut = GetStdHandle(STD_OUTPUT_HANDLE);
+
+	char	utf8buffer[8192+1];
+	for (;;) 
+	{ 
+		bSuccess = ReadFile(_handles->m_stdOut_Read, utf8buffer, 8192, &dwRead, NULL);
+		if (!bSuccess)
+			break;
+
+		utf8buffer[dwRead] = '\0';
+
+		if (dwRead <= 8192*2)
+			_buffer += utf8buffer;
+		else
+			_buffer += '\0';
+
+		if (dwRead < 8192)
+			break;
+	}
+	CloseHandle(hParentStdOut);
+	return dwRead;
+} 
+
+bool processGetOutputOf(const char* _cmdLine, string_rtm& _buffer, bool _redirect)
+{
+	PipeHandles handles;
+	CreatePipes(&handles);
+
+	BOOL success = createChildProcess(_cmdLine, &handles, _redirect);
+	
+	if (!success)
+		return false;
+
+	ReadFromPipe(_buffer, &handles);
+	return true;
+}
+
+char* processGetOutputOf(const char* _cmdLine, bool _redirectIO)
+{
+	string_rtm buffer;
+	processGetOutputOf(_cmdLine, buffer, _redirectIO);
+	size_t len = strlen(_cmdLine);
+	if (len)
+	{
+		char* res = (char*)rtm_alloc(sizeof(char) * (len + 1));
+		strcpy(res, buffer.c_str());
+		return res;
+	}
+	return 0;
+}
+
 #else // RTM_PLATFORM_WINDOWS
 
 bool processIs64bitBinary(const char* _path)
@@ -168,6 +350,19 @@ bool processRun(const char* _cmdLine)
 	return false;
 }
 
+char* processGetOutputOf(const char* _cmdLine, bool _redirectIO)
+{
+	RTM_UNUSED(_cmdLine);
+	RTM_UNUSED(_redirectIO);
+	return 0;
+}
+
 #endif // RTM_PLATFORM_WINDOWS
+
+void processReleaseOutput(const char* _output)
+{
+	if (_output)
+		rtm_free((void*)_output);
+}
 
 } // namespace rdebug
