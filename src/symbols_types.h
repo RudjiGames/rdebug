@@ -3,8 +3,8 @@
 /// License: http://www.opensource.org/licenses/BSD-2-Clause               ///
 //--------------------------------------------------------------------------//
 
-#ifndef __RTM_QT_UTIL_SYMBOLS_TYPES_H__
-#define __RTM_QT_UTIL_SYMBOLS_TYPES_H__
+#ifndef __RTM_RQT_SYMBOLS_TYPES_H__
+#define __RTM_RQT_SYMBOLS_TYPES_H__
 
 #include <rdebug/inc/rdebug.h>
 #include <rdebug/src/symbols_map.h>
@@ -70,4 +70,4 @@ struct ResolveInfo
 
 } // namespace rdebug
 
-#endif // __RTM_QT_UTIL_SYMBOLS_TYPES_H__
+#endif // __RTM_RQT_SYMBOLS_TYPES_H__

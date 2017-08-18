@@ -223,7 +223,7 @@ BOOL createChildProcess(const char* _cmdLine, PipeHandles* _handles, bool _redir
 		h[1] = piProcInfo.hProcess;
 
 		DWORD written;
-		string_rtm buffer, wbuffer;
+		rtm_string buffer, wbuffer;
 		buffer.reserve(g_bufferSize);
 		wbuffer.reserve(g_bufferSize);
 		HANDLE out = GetStdHandle(STD_OUTPUT_HANDLE); 
@@ -272,7 +272,7 @@ void CreatePipes(PipeHandles* _handles)
 	SetHandleInformation(_handles->m_stdIn_Write, HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT);
 }
 
-DWORD ReadFromPipe(string_rtm& _buffer, PipeHandles* _handles)
+DWORD ReadFromPipe(rtm_string& _buffer, PipeHandles* _handles)
 { 
 	DWORD dwRead;
 	BOOL bSuccess = FALSE;
@@ -299,7 +299,7 @@ DWORD ReadFromPipe(string_rtm& _buffer, PipeHandles* _handles)
 	return dwRead;
 } 
 
-bool processGetOutputOf(const char* _cmdLine, string_rtm& _buffer, bool _redirect)
+bool processGetOutputOf(const char* _cmdLine, rtm_string& _buffer, bool _redirect)
 {
 	PipeHandles handles;
 	CreatePipes(&handles);
@@ -315,7 +315,7 @@ bool processGetOutputOf(const char* _cmdLine, string_rtm& _buffer, bool _redirec
 
 char* processGetOutputOf(const char* _cmdLine, bool _redirectIO)
 {
-	string_rtm buffer;
+	rtm_string buffer;
 	processGetOutputOf(_cmdLine, buffer, _redirectIO);
 	size_t len = strlen(_cmdLine);
 	if (len)
