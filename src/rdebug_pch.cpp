@@ -10,6 +10,12 @@
 
 namespace rdebug {
 
+	Toolchain::Toolchain() :	m_type(Toolchain::Unknown),
+								m_toolchainPath(0),
+								m_toolchainPrefix(0)
+	{
+	}
+
 	bool init(rtmLibInterface* _libInterface)
 	{
 		g_allocator = _libInterface ? _libInterface->m_memory : 0;

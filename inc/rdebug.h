@@ -17,14 +17,17 @@ namespace rdebug {
 	{
 		enum Type
 		{
-			TC_MSVC,	// pdb
-			TC_GCC,		// nm, addr2line, c++filt
-			TC_PS3SNC	// ps3bin
+			Unknown,	// 
+			MSVC,		// pdb
+			GCC,		// nm, addr2line, c++filt
+			PS3SNC		// ps3bin
 		};
 
 		Toolchain::Type	m_type;
 		const char*		m_toolchainPath;	// or symbol store path list for MSVC
 		const char*		m_toolchainPrefix;
+
+		Toolchain();
 	};
 
 	/// Module information structure

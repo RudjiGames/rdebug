@@ -16,5 +16,7 @@
 #include <rbase/inc/winchar.h>
 #include <rbase/inc/libhandler.h>
 
+#include <rdebug/inc/rdebug.h>
+
 #endif // __RTM_TOOLUTIL_TOOLUTIL_PCH_H__
 

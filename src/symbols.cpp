@@ -107,7 +107,7 @@ uintptr_t symbolResolverCreate(ModuleInfo* _moduleInfos, uint32_t _numInfos, Too
 	std::string append_a2l;
 	std::string append_cppf;
 
-	if (_tc->m_type == rdebug::Toolchain::TC_GCC)
+	if (_tc->m_type == rdebug::Toolchain::GCC)
 	{
 		append_nm	= "\" -C --print-size --numeric-sort --line-numbers \"";
 		append_nm	+= _executablePath;
@@ -121,7 +121,7 @@ uintptr_t symbolResolverCreate(ModuleInfo* _moduleInfos, uint32_t _numInfos, Too
 		append_cppf	= "\" -t -n ";
 	}
 
-	if (_tc->m_type == rdebug::Toolchain::TC_PS3SNC)
+	if (_tc->m_type == rdebug::Toolchain::PS3SNC)
 	{
 		append_nm	= "\" -dsy \"";
 		append_nm	+= _executablePath;
@@ -145,7 +145,7 @@ uintptr_t symbolResolverCreate(ModuleInfo* _moduleInfos, uint32_t _numInfos, Too
 
 	switch (_tc->m_type)
 	{
-		case rdebug::Toolchain::TC_MSVC:
+		case rdebug::Toolchain::MSVC:
 			info->m_parseSym		= 0;
 			info->m_parseSymMap		= 0;
 			info->m_symbolStore		= info->scratch( _tc->m_toolchainPath );
@@ -154,7 +154,7 @@ uintptr_t symbolResolverCreate(ModuleInfo* _moduleInfos, uint32_t _numInfos, Too
 			info->m_tc_cppfilt		= 0;
 			break;
 
-		case rdebug::Toolchain::TC_GCC:
+		case rdebug::Toolchain::GCC:
 			info->m_parseSym		= parseAddr2LineSymbolInfo;
 			info->m_parseSymMap		= parseSymbolMapGNU;
 			info->m_symbolStore		= 0;
@@ -163,7 +163,7 @@ uintptr_t symbolResolverCreate(ModuleInfo* _moduleInfos, uint32_t _numInfos, Too
 			info->m_tc_cppfilt		= info->scratch( (quote + _tc->m_toolchainPath + _tc->m_toolchainPrefix + "c++filt" + append_cppf).c_str() );
 			break;
 
-		case rdebug::Toolchain::TC_PS3SNC:
+		case rdebug::Toolchain::PS3SNC:
 			info->m_parseSym		= parsePlayStationSymbolInfo;
 			info->m_parseSymMap		= parseSymbolMapPS3;
 			info->m_symbolStore		= 0;
