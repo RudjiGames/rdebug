@@ -5,4 +5,20 @@
 
 #include <rdebug_pch.h>
 
-int g_warning_kill_rdebug_pch;
+#define RTM_LIBHANDLER_DEFINE
+#include <rbase/inc/libhandler.h>
+
+namespace rdebug {
+
+	bool init(rtmLibInterface* _libInterface)
+	{
+		g_allocator = _libInterface ? _libInterface->m_memory : 0;
+		g_errorHandler = _libInterface ? _libInterface->m_error : 0;
+
+		return false;
+	}
+
+	void shutDown()
+	{
+	}
+}

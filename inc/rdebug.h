@@ -8,6 +8,8 @@
 
 #include <stdint.h>
 
+struct rtmLibInterface;
+
 namespace rdebug {
 
 	/// Toolchain description structure
@@ -52,7 +54,7 @@ namespace rdebug {
 	///
 	/// @param _libInterface
 	///
-	bool init(rtm::LibInterface* _libInterface = 0);
+	bool init(rtmLibInterface* _libInterface = 0);
 
 	/// Shut down rdebug library and release internal resources
 	///
