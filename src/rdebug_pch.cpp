@@ -21,7 +21,7 @@ namespace rdebug {
 		g_allocator = _libInterface ? _libInterface->m_memory : 0;
 		g_errorHandler = _libInterface ? _libInterface->m_error : 0;
 
-		return false;
+		return true;
 	}
 
 	void shutDown()
