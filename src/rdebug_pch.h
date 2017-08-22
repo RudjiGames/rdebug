@@ -6,8 +6,6 @@
 #ifndef __RTM_TOOLUTIL_TOOLUTIL_PCH_H__
 #define __RTM_TOOLUTIL_TOOLUTIL_PCH_H__
 
-#include <string>
-
 #define RBASE_NAMESPACE rdebug
 #define RTM_DEFINE_STL_STRING
 
