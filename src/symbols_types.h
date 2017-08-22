@@ -27,7 +27,7 @@ struct Module
 	{
 		m_module.m_baseAddress		= 0;
 		m_module.m_size				= 0;
-		m_module.m_modulePath		= 0;
+		m_module.m_modulePath[0]	= '\0';
 		m_moduleName				= 0;
 		m_isRTMdll = false;
 #if RTM_PLATFORM_WINDOWS
@@ -38,7 +38,7 @@ struct Module
 
 struct ResolveInfo
 {
-	static const uint32_t SCRATCH_MEM_SIZE	= 128*1024;
+	static const uint32_t SCRATCH_MEM_SIZE	= 64*1024;
 	static const uint32_t MAX_MODULES		= 256;
 
 	typedef rtm::FixedArray<Module, MAX_MODULES> ModuleArray;

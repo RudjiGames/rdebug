@@ -35,7 +35,7 @@ namespace rdebug {
 	{
 		uint64_t		m_baseAddress;
 		uint64_t		m_size;
-		const char*		m_modulePath;
+		char			m_modulePath[1024];
 		Toolchain		m_toolchain;
 
 		inline bool checkAddress(uint64_t _address) const

@@ -176,12 +176,29 @@ uintptr_t symbolResolverCreate(ModuleInfo* _moduleInfos, uint32_t _numInfos, Too
 	return (uintptr_t)info;
 }
 
+typedef rtm::FixedArray<ModuleInfo, ResolveInfo::MAX_MODULES> ModuleInfoArray;
+
 uintptr_t symbolResolverCreateForCurrentProcess()
 {
 #if RTM_PLATFORM_WINDOWS
-	ResolveInfo* info = rtm_new<ResolveInfo>();
 
-	//uint32_t buffPtr = 0;
+	Toolchain toolchain;
+
+#if RTM_COMPILER_MSVC
+	wchar_t symStoreBuffer[2048];
+	if (0 == GetEnvironmentVariableW(L"_NT_SYMBOL_PATH", (LPWSTR)symStoreBuffer, sizeof(symStoreBuffer)))
+		wcscpy(symStoreBuffer, L"");
+	rtm::WideToMulti symStore(symStoreBuffer);
+
+	toolchain.m_type			= Toolchain::MSVC;
+	toolchain.m_toolchainPath	= symStore;
+#else
+	toolchain.m_type			= Toolchain::GCC;
+	toolchain.m_toolchainPath	= 0;
+#endif
+	toolchain.m_toolchainPrefix	= 0;
+
+	ModuleInfoArray modules;
 
 	HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPALL, 0);
 	if (snapshot != INVALID_HANDLE_VALUE)
@@ -209,13 +226,11 @@ uintptr_t symbolResolverCreateForCurrentProcess()
 
 					    uint64_t modBase = (uint64_t)mi.lpBaseOfDll;
 						uint64_t modSize = (uint64_t)mi.SizeOfImage;
-						Module module;
-						module.m_module.m_baseAddress	= modBase;
-						module.m_module.m_baseAddress	= modBase;
-						module.m_module.m_size			= modSize;
-						module.m_module.m_modulePath	= info->scratch(modulePath.m_ptr);	
-						module.m_moduleName				= getFileName(module.m_module.m_modulePath);
-						info->m_modules.push_back(module);
+						ModuleInfo module;
+						module.m_baseAddress	= modBase;
+						module.m_size			= modSize;
+						strcpy(module.m_modulePath, modulePath.m_ptr);
+						modules.push_back(module);
 			        }
 			    }
 			}
@@ -227,18 +242,18 @@ uintptr_t symbolResolverCreateForCurrentProcess()
 
 			uint64_t modBase = (uint64_t)me.modBaseAddr;
 			uint64_t modSize = (uint64_t)me.modBaseSize;
-			Module module;
-			module.m_module.m_baseAddress	= modBase;
-			module.m_module.m_size			= modSize;
-			module.m_module.m_modulePath	= info->scratch(exePath.m_ptr);
-			module.m_moduleName				= getFileName(module.m_module.m_modulePath);
+			ModuleInfo module;
+			module.m_baseAddress	= modBase;
+			module.m_size			= modSize;
+			strcpy(module.m_modulePath, exePath.m_ptr);
+			modules.push_back(module);
 			cap = Module32NextW(snapshot, &me);
 		}
 
 		CloseHandle(snapshot);
 	}
 
-	return (uintptr_t)info;
+	return symbolResolverCreate(&modules[0], modules.size(), &toolchain);
 #else
 	return 0;
 #endif
@@ -253,15 +268,18 @@ void symbolResolverDelete(uintptr_t _resolver)
 
 ResolveInfo::ResolveInfo()
 {
-	m_scratch			= (char*)rtm_alloc(sizeof(char) *  SCRATCH_MEM_SIZE);
-	m_scratchPos		= 0;
-	m_tc_addr2line		= "";
-	m_tc_nm				= "";
-	m_tc_cppfilt		= "";
-	m_executablePath	= "";
-
+	m_scratch				= (char*)rtm_alloc(sizeof(char) *  SCRATCH_MEM_SIZE);
+	m_scratchPos			= 0;
+	m_tc_type				= Toolchain::Unknown;
+	m_tc_addr2line			= 0;
+	m_tc_nm					= 0;
+	m_tc_cppfilt			= 0;
+	m_executablePath		= 0;
+	m_executableName		= 0;
 	m_parseSym				= 0;
+	m_parseSymMap			= 0;
 	m_baseAddress4addr2Line = 0;
+	m_symbolStore			= 0;
 	m_symbolMapInitialized	= false;
 }
 
