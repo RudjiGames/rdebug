@@ -103,9 +103,9 @@ uintptr_t symbolResolverCreate(ModuleInfo* _moduleInfos, uint32_t _numInfos, Too
 	// addr2Line:		ps3bin.exe + " -a2l 0x%x -i " + [SYMBOL]
 	// c++filt:			ps3name.exe [MANGLED NAME]
 
-	std::string append_nm;
-	std::string append_a2l;
-	std::string append_cppf;
+	rtm_string append_nm;
+	rtm_string append_a2l;
+	rtm_string append_cppf;
 
 	if (_tc->m_type == rdebug::Toolchain::GCC)
 	{
@@ -141,7 +141,7 @@ uintptr_t symbolResolverCreate(ModuleInfo* _moduleInfos, uint32_t _numInfos, Too
 	append_cppf	= ".exe" + append_cppf;
 #endif
 
-	std::string quote("\"");
+	rtm_string quote("\"");
 
 	switch (_tc->m_type)
 	{

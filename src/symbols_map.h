@@ -17,8 +17,8 @@ struct Symbol
 	int64_t			m_offset;
 	uint64_t		m_size;
 	uint32_t		m_line;
-	std::string		m_file;
-	std::string		m_name;
+	rtm_string		m_file;
+	rtm_string		m_name;
 
 	Symbol();
 };
