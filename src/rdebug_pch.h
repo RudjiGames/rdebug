@@ -3,8 +3,8 @@
 /// License: http://www.opensource.org/licenses/BSD-2-Clause               ///
 //--------------------------------------------------------------------------//
 
-#ifndef __RTM_TOOLUTIL_TOOLUTIL_PCH_H__
-#define __RTM_TOOLUTIL_TOOLUTIL_PCH_H__
+#ifndef RTM_TOOLUTIL_TOOLUTIL_PCH_H
+#define RTM_TOOLUTIL_TOOLUTIL_PCH_H
 
 #define RBASE_NAMESPACE rdebug
 #define RTM_DEFINE_STL_STRING
@@ -16,5 +16,5 @@
 
 #include <rdebug/inc/rdebug.h>
 
-#endif // __RTM_TOOLUTIL_TOOLUTIL_PCH_H__
+#endif // RTM_TOOLUTIL_TOOLUTIL_PCH_H
 

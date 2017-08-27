@@ -3,8 +3,8 @@
 /// License: http://www.opensource.org/licenses/BSD-2-Clause               ///
 //--------------------------------------------------------------------------//
 
-#ifndef __RTM_RDEBUG_PDB_H__
-#define __RTM_RDEBUG_PDB_H__
+#ifndef RTM_RDEBUG_PDB_H
+#define RTM_RDEBUG_PDB_H
 
 #include <rbase/inc/platform.h>
 
@@ -43,4 +43,4 @@ class PDBFile
 
 #endif // RTM_PLATFORM_WINDOWS
 
-#endif // __RTM_RDEBUG_PDB_H__
+#endif // RTM_RDEBUG_PDB_H

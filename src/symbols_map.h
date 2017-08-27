@@ -3,8 +3,8 @@
 /// License: http://www.opensource.org/licenses/BSD-2-Clause               ///
 //--------------------------------------------------------------------------//
 
-#ifndef __RTM_RDEBUG_SYMBOLS_MAP_H__
-#define __RTM_RDEBUG_SYMBOLS_MAP_H__
+#ifndef RTM_RDEBUG_SYMBOLS_MAP_H
+#define RTM_RDEBUG_SYMBOLS_MAP_H
 
 #include <rbase/inc/containers.h>
 #include <vector>
@@ -34,4 +34,4 @@ struct SymbolMap
 
 } // namespace rdebug
 
-#endif // __RTM_RDEBUG_SYMBOLS_MAP_H__
+#endif // RTM_RDEBUG_SYMBOLS_MAP_H

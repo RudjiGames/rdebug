@@ -3,8 +3,8 @@
 /// License: http://www.opensource.org/licenses/BSD-2-Clause               ///
 //--------------------------------------------------------------------------//
 
-#ifndef __RTM_DEBUG_H__
-#define __RTM_DEBUG_H__
+#ifndef RTM_DEBUG_H
+#define RTM_DEBUG_H
 
 #include <stdint.h>
 
@@ -132,4 +132,4 @@ namespace rdebug {
 
 } // namespace rdebug
 
-#endif // __RTM_DEBUG_H__
+#endif // RTM_DEBUG_H
