@@ -13,6 +13,7 @@
 #include <rbase/inc/strings.h>
 #include <rbase/inc/winchar.h>
 #include <rbase/inc/libhandler.h>
+#include <rbase/inc/path.h>
 
 #include <rdebug/inc/rdebug.h>
 

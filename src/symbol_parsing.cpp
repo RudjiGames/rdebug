@@ -11,13 +11,6 @@
 
 namespace rdebug {
 
-const char* getFileName(const char* _path)
-{
-	size_t len = strlen(_path);
-	while ((_path[len] != '/') && (_path[len] != '\\') && (len>0)) --len;
-	return &_path[len + 1];
-}
-
 inline static bool charIsDigit(char _c)
 {
 	return ((_c >= '0') && (_c <= '9'));

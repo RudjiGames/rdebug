@@ -16,6 +16,8 @@
 #include <DbgHelp.h>
 #pragma warning (default: 4091)
 #pragma comment(lib, "diaguids.lib")
+#else
+typedef uint16_t  __wchar_t;
 #endif
 
 #include <DIA/include/diacreate.h>
@@ -30,6 +32,7 @@ class DiaLoadCallBack : public IDiaLoadCallback2
 
 	public:
 		DiaLoadCallBack(wchar_t inBuffer[1024]) : m_refCount(0), m_buffer(inBuffer) {}
+		virtual ~DiaLoadCallBack() {}
 
     //	IUnknown
 	ULONG	STDMETHODCALLTYPE AddRef()
@@ -133,7 +136,7 @@ bool findSymbol(const char* _path, char _outSymbolPath[1024], const char* _symbo
 
 } // namespace rdebug
 
-const wchar_t*	TEXT_PDB_FILE_EXTENSION	= L".pdb";
+const char*	s_PDB_File_Extension = ".pdb";
 
 PDBFile::PDBFile() :
 	m_pIDiaDataSource( NULL ),
@@ -167,10 +170,10 @@ void PDBFile::close()
 	}
 }
 
-bool PDBFile::load(const wchar_t* _filename)
+bool PDBFile::load(const char* _filename)
 {
 	if (!_filename) return false;
-	if (wcslen(_filename) == 0) return false;
+	if (strlen(_filename) == 0) return false;
 
 	if (m_pIDiaDataSource == NULL)
 	{
@@ -185,28 +188,25 @@ bool PDBFile::load(const wchar_t* _filename)
 
 	bool bRet = false;
 
-	wchar_t wszExt[MAX_PATH];
-	if (_wsplitpath_s( _filename, NULL, 0, NULL, 0, NULL, 0, wszExt, MAX_PATH)==0)
+	const char* ext = rtm::pathGetExt(_filename);
+	if (ext && (strcmp(ext, s_PDB_File_Extension)==0))
 	{
-		if (_wcsicmp( wszExt, TEXT_PDB_FILE_EXTENSION )==0)
+		if (loadSymbolsFileWithoutValidation(_filename))
 		{
-			if (loadSymbolsFileWithoutValidation(_filename))
-			{
-				bRet = m_pIDiaSession->get_globalScope( &m_pIDiaSymbol )==S_OK?true:false;
+			bRet = m_pIDiaSession->get_globalScope( &m_pIDiaSymbol )==S_OK?true:false;
 
-				m_isStripped = false;
-				if( m_pIDiaSymbol )
+			m_isStripped = false;
+			if( m_pIDiaSymbol )
+			{
+				BOOL b = FALSE;
+				HRESULT hr = m_pIDiaSymbol->get_isStripped(&b);
+				if(hr==S_OK)
 				{
-					BOOL b = FALSE;
-					HRESULT hr = m_pIDiaSymbol->get_isStripped(&b);
-					if(hr==S_OK)
-					{
-						m_isStripped = b?true:false;
-					}
+					m_isStripped = b?true:false;
 				}
-	
-				_ASSERT( bRet );
 			}
+	
+			RTM_ASSERT(bRet, "");
 		}
 	}
 
@@ -215,7 +215,7 @@ bool PDBFile::load(const wchar_t* _filename)
 		m_sFileName = _filename;
 
 		IDiaEnumSymbols* compilands;
-		HRESULT hr = m_pIDiaSymbol->findChildren(SymTagCompiland, NULL, NULL, &compilands);
+		HRESULT hr = m_pIDiaSymbol->findChildren(SymTagCompiland, 0, 0, &compilands);
 		RTM_ASSERT(hr == S_OK, "Unable to find PDB's compilands.");
 		if (hr != S_OK)
 			return bRet;
@@ -241,9 +241,9 @@ bool PDBFile::load(const wchar_t* _filename)
 			IDiaEnumSymbols* functions;
 			IDiaSymbol* currFunction;
 			if (!m_isStripped)
-				hr = currCompiland->findChildren(SymTagFunction, NULL, NULL, &functions);
+				hr = currCompiland->findChildren(SymTagFunction, 0, 0, &functions);
 			else
-				hr = currCompiland->findChildren(SymTagPublicSymbol, NULL, NULL, &functions);
+				hr = currCompiland->findChildren(SymTagPublicSymbol, 0, 0, &functions);
 
 			if(hr != S_OK)
 			{
@@ -303,6 +303,27 @@ bool PDBFile::load(const wchar_t* _filename)
 
 	return bRet;
 }
+
+#ifndef UNDNAME_COMPLETE
+#define UNDNAME_COMPLETE                 (0x0000)  // Enable full undecoration
+#define UNDNAME_NO_LEADING_UNDERSCORES   (0x0001)  // Remove leading underscores from MS extended keywords
+#define UNDNAME_NO_MS_KEYWORDS           (0x0002)  // Disable expansion of MS extended keywords
+#define UNDNAME_NO_FUNCTION_RETURNS      (0x0004)  // Disable expansion of return type for primary declaration
+#define UNDNAME_NO_ALLOCATION_MODEL      (0x0008)  // Disable expansion of the declaration model
+#define UNDNAME_NO_ALLOCATION_LANGUAGE   (0x0010)  // Disable expansion of the declaration language specifier
+#define UNDNAME_NO_MS_THISTYPE           (0x0020)  // NYI Disable expansion of MS keywords on the 'this' type for primary declaration
+#define UNDNAME_NO_CV_THISTYPE           (0x0040)  // NYI Disable expansion of CV modifiers on the 'this' type for primary declaration
+#define UNDNAME_NO_THISTYPE              (0x0060)  // Disable all modifiers on the 'this' type
+#define UNDNAME_NO_ACCESS_SPECIFIERS     (0x0080)  // Disable expansion of access specifiers for members
+#define UNDNAME_NO_THROW_SIGNATURES      (0x0100)  // Disable expansion of 'throw-signatures' for functions and pointers to functions
+#define UNDNAME_NO_MEMBER_TYPE           (0x0200)  // Disable expansion of 'static' or 'virtual'ness of members
+#define UNDNAME_NO_RETURN_UDT_MODEL      (0x0400)  // Disable expansion of MS model for UDT returns
+#define UNDNAME_32_BIT_DECODE            (0x0800)  // Undecorate 32-bit decorated names
+#define UNDNAME_NAME_ONLY                (0x1000)  // Crack only the name for primary declaration;
+
+#define UNDNAME_NO_ARGUMENTS             (0x2000)  // Don't undecorate arguments to function
+#define UNDNAME_NO_SPECIAL_SYMS          (0x4000)  // Don't undecorate special names (v-table, vcall, vector xxx, metatype, etc)
+#endif
 
 #define UND_CODE (					\
 	UNDNAME_NO_THROW_SIGNATURES		| \
@@ -427,7 +448,7 @@ uintptr_t PDBFile::getSymbolID(uint64_t _address)
 		return 0;
 }
 
-bool PDBFile::loadSymbolsFileWithoutValidation(const wchar_t* _PdbFileName)
+bool PDBFile::loadSymbolsFileWithoutValidation(const char* _PdbFileName)
 {
 	bool bRet = false;
 	IDiaDataSource* pIDiaDataSource = m_pIDiaDataSource;
@@ -436,7 +457,7 @@ bool PDBFile::loadSymbolsFileWithoutValidation(const wchar_t* _PdbFileName)
 	{
 		bool bContinue = false;
 
-		HRESULT hr = pIDiaDataSource->loadDataFromPdb(_PdbFileName);
+		HRESULT hr = pIDiaDataSource->loadDataFromPdb(rtm::MultiToWide(_PdbFileName));
 		
 		if(SUCCEEDED(hr))
 			bContinue = true;

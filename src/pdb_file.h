@@ -21,7 +21,7 @@
 class PDBFile
 {
 	private:
-		std::wstring		m_sFileName;
+		rtm_string			m_sFileName;
 		IDiaDataSource*		m_pIDiaDataSource;
 		IDiaSession*		m_pIDiaSession;
 		IDiaSymbol*			m_pIDiaSymbol;
@@ -32,13 +32,13 @@ class PDBFile
 		PDBFile();
 		~PDBFile();
 
-		bool		load(const wchar_t* _filename);
+		bool		load(const char* _filename);
 		void		getSymbolByAddress(uint64_t _address, rdebug::StackFrame& _frame);
 		uintptr_t	getSymbolID(uint64_t _address);
 		void		close();
 
 	private:
-		bool		loadSymbolsFileWithoutValidation(const wchar_t* _PdbFileName);
+		bool		loadSymbolsFileWithoutValidation(const char* _PdbFileName);
 };
 
 #endif // RTM_PLATFORM_WINDOWS

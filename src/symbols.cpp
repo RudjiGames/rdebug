@@ -31,27 +31,6 @@ namespace rdebug {
 	bool findSymbol(const char* _path, char _outSymbolPath[1024], const char* _symbolStore);
 }
 
-static inline const char* getFileName(const char* _path)
-{
-	size_t len = strlen(_path);
-	while ((_path[len] != '/') && (_path[len] != '\\') && (len>0)) --len;
-	return &_path[len + 1];
-}
-
-static inline const char* pathGetExt(const char* _path)
-{
-	size_t len = strlen(_path);
-
-	while (--len)
-		if (_path[len] == '.')
-			break;
-
-	if (_path[len++] == '.')
-		return &_path[len];
-
-	return 0;
-}
-
 namespace rdebug {
 
 void parseAddr2LineSymbolInfo(char* _str, StackFrame& _frame);
@@ -72,7 +51,7 @@ uintptr_t symbolResolverCreate(ModuleInfo* _moduleInfos, uint32_t _numInfos, Too
 	{
 		Module module;
 		module.m_module		= _moduleInfos[i];
-		module.m_moduleName	= getFileName(module.m_module.m_modulePath);
+		module.m_moduleName	= rtm::pathGetFileName(module.m_module.m_modulePath);
 
 		char tmpName[1024];
 		strcpy(tmpName, module.m_moduleName); 
@@ -81,7 +60,7 @@ uintptr_t symbolResolverCreate(ModuleInfo* _moduleInfos, uint32_t _numInfos, Too
 		if ((strcmp(tmpName,"MTUNERDLL32.DLL") == 0) || (strcmp(tmpName,"MTUNERDLL64.DLL") == 0))
 			module.m_isRTMdll = true;
 
-		const char* ext = pathGetExt(tmpName);
+		const char* ext = rtm::pathGetExt(tmpName);
 		if (ext && 
 			((strcmp(ext, "EXE") == 0) || (strcmp(ext, "ELF") == 0)))
 			_executablePath = _moduleInfos[i].m_modulePath;
@@ -90,7 +69,7 @@ uintptr_t symbolResolverCreate(ModuleInfo* _moduleInfos, uint32_t _numInfos, Too
 	}
 
 	info->m_executablePath	= info->scratch(_executablePath);
-	info->m_executableName	= getFileName(info->m_executablePath);
+	info->m_executableName	= rtm::pathGetFileName(info->m_executablePath);
 	info->m_tc_type			= _tc->m_type;
 
 	// nm				-C --print-size --numeric-sort --line-numbers [SYMBOL]
@@ -366,8 +345,7 @@ void loadPDB(Module& _module, const char* _symbolStore)
 		char symbolPath[1024];
 		strcpy(symbolPath, "");
 		findSymbol(_module.m_module.m_modulePath, symbolPath, _symbolStore);
-		rtm::MultiToWide symbolPathWide(symbolPath);
-		_module.m_PDBFile->load(symbolPathWide.m_ptr);
+		_module.m_PDBFile->load(symbolPath);
 	}
 }
 #endif // RTM_PLATFORM_WINDOWS
@@ -391,7 +369,7 @@ void symbolResolverGetFrame(uintptr_t _resolver, uint64_t _address, StackFrame* 
 			Module& module = info->m_modules[i];
 			loadPDB(module, info->m_symbolStore);
 			module.m_PDBFile->getSymbolByAddress(_address - module.m_module.m_baseAddress, *_frame);
-			strcpy(_frame->m_moduleName, getFileName(module.m_module.m_modulePath));
+			strcpy(_frame->m_moduleName, rtm::pathGetFileName(module.m_module.m_modulePath));
 			return;
 		}
 	}
