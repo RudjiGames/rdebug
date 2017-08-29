@@ -150,6 +150,9 @@ uintptr_t symbolResolverCreate(ModuleInfo* _moduleInfos, uint32_t _numInfos, Too
 			info->m_tc_nm			= info->scratch( (quote + _tc->m_toolchainPath + _tc->m_toolchainPrefix + "ps3bin" + append_nm).c_str() );
 			info->m_tc_cppfilt		= info->scratch( (quote + _tc->m_toolchainPath + _tc->m_toolchainPrefix + "ps3name" + append_cppf).c_str() );
 			break;
+
+		case rdebug::Toolchain::Unknown:
+			RTM_ERROR("Should not reach here!");
 	};
 
 	return (uintptr_t)info;
@@ -293,6 +296,7 @@ class DiaLoadCallBack : public IDiaLoadCallback2
 
 	public:
 		DiaLoadCallBack(wchar_t inBuffer[1024]) : m_RefCount(0), m_Buffer(inBuffer) {}
+		virtual ~DiaLoadCallBack() {}
 
     //	IUnknown
 	ULONG STDMETHODCALLTYPE AddRef() { m_RefCount++; return m_RefCount; }
@@ -380,7 +384,7 @@ void symbolResolverGetFrame(uintptr_t _resolver, uint64_t _address, StackFrame* 
 		strcpy(_frame->m_moduleName, info->m_executableName);
 
 		char cmdline[4096 * 2];
-#if RTM_PLATFORM_WINDOWS
+#if RTM_PLATFORM_WINDOWS && RTM_COMPILER_MSVC
 		sprintf_s(cmdline, 4096 * 2, info->m_tc_addr2line, _address - info->m_baseAddress4addr2Line);
 #else
 		sprintf(cmdline, /*4096*2,*/ info->m_tc_addr2line, _address - info->m_baseAddress4addr2Line);
@@ -395,7 +399,7 @@ void symbolResolverGetFrame(uintptr_t _resolver, uint64_t _address, StackFrame* 
 		if (strcmp(_frame->m_func, "Unknown") != 0)
 			if (strlen(info->m_tc_cppfilt) != 0)
 			{
-#if RTM_PLATFORM_WINDOWS
+#if RTM_PLATFORM_WINDOWS && RTM_COMPILER_MSVC
 				sprintf_s(cmdline, 4096 * 2, "%s%s", info->m_tc_cppfilt, _frame->m_func);
 #else
 				sprintf(cmdline, /*4096 * 2,*/ "%s%s", info->m_tc_cppfilt, _frame->m_func);

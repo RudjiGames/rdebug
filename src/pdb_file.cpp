@@ -106,20 +106,20 @@ bool findSymbol(const char* _path, char _outSymbolPath[1024], const char* _symbo
 			wcscpy(symStoreBuffer, L"");
 	}
 
-	rtm::MultiToWide path(_path);
-
-	const wchar_t* scrPath = path;
-	wchar_t moduleName[512];
-	if (!_path || (wcslen(path) == 0))
+	char moduleNameM[512];
+	const char* srcPath = _path;
+	if (!srcPath || (strlen(srcPath) == 0))
 	{
+		wchar_t moduleName[512];
 		GetModuleFileNameW(NULL, moduleName, sizeof(wchar_t)*512);
-		scrPath = moduleName;
+		strcpy(moduleNameM, rtm::WideToMulti(moduleName));
+		srcPath = moduleNameM;
 	}
 
 	wchar_t outSymbolPath[1024];
 	DiaLoadCallBack callback(outSymbolPath);
 	callback.AddRef();
-	hr = pIDiaDataSource->loadDataForExe((LPOLESTR)path, (LPOLESTR)symStoreBuffer, &callback);
+	hr = pIDiaDataSource->loadDataForExe((LPOLESTR)srcPath, (LPOLESTR)symStoreBuffer, &callback);
 
 	if (FAILED(hr))
 	{
@@ -375,14 +375,10 @@ void PDBFile::getSymbolByAddress(uint64_t _address, rdebug::StackFrame& _frame)
 			ULONG celt = 0;
 			for (;;)
 			{
-				bool shouldBreak = false;
 				IDiaLineNumber* Line = NULL;
 				lineEnum->Next(1, &Line, &celt);
 				if (!Line)
-				{
-					shouldBreak = true;
 					celt = 1;			// hack, no file and line but has symbol name
-				}
 
 				if (celt==1)
 				{
