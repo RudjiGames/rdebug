@@ -10,10 +10,11 @@
 
 namespace rdebug {
 
-	Toolchain::Toolchain() :	m_type(Toolchain::Unknown),
-								m_toolchainPath(0),
-								m_toolchainPrefix(0)
+	Toolchain::Toolchain()
+		: m_type(Toolchain::Unknown)
 	{
+		m_toolchainPath[0]		= 0;
+		m_toolchainPrefix[0]	= 0;
 	}
 
 	bool init(rtmLibInterface* _libInterface)

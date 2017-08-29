@@ -24,8 +24,8 @@ namespace rdebug {
 		};
 
 		Toolchain::Type	m_type;
-		const char*		m_toolchainPath;	// or symbol store path list for MSVC
-		const char*		m_toolchainPrefix;
+		char			m_toolchainPath[2048];	// or symbol store path list for MSVC
+		char			m_toolchainPrefix[64];
 
 		Toolchain();
 	};

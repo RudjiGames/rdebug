@@ -173,12 +173,12 @@ uintptr_t symbolResolverCreateForCurrentProcess()
 	rtm::WideToMulti symStore(symStoreBuffer);
 
 	toolchain.m_type			= Toolchain::MSVC;
-	toolchain.m_toolchainPath	= symStore;
+	strcpy(toolchain.m_toolchainPath, symStore);
 #else
 	toolchain.m_type			= Toolchain::GCC;
-	toolchain.m_toolchainPath	= 0;
+	strcpy(toolchain.m_toolchainPath, "");
 #endif
-	toolchain.m_toolchainPrefix	= 0;
+	strcpy(toolchain.m_toolchainPrefix, "");
 
 	ModuleInfoArray modules;
 
