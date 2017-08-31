@@ -20,8 +20,24 @@
 #pragma warning (default: 4091)
 
 #pragma comment(lib, "dbghelp.lib")
-#pragma comment(lib, "psapi.lib")
+//#pragma comment(lib, "psapi.lib")
 #endif // RTM_COMPILER_MSVC
+
+typedef BOOL  (WINAPI * fnGetModuleInformation)(HANDLE hProcess, HMODULE hModule, LPMODULEINFO lpmodinfo, DWORD cb);
+typedef BOOL  (WINAPI * fnEnumProcessModules)(HANDLE hProcess, HMODULE* lphModule, DWORD cb, LPDWORD lpcbNeeded);
+typedef DWORD (WINAPI * fnGetModuleFileNameExW)(HANDLE  hProcess, HMODULE hModule, LPWSTR lpFilename, DWORD nSize);
+
+static fnGetModuleInformation	gFn_getModuleInformation	= 0;
+static fnEnumProcessModules		gFn_enumProcessModules		= 0;
+static fnGetModuleFileNameExW	gFn_getModuleFileNameExW	= 0;
+
+FARPROC loadFunc(HMODULE _kernel, HMODULE _psapi, const char* _name)
+{
+	FARPROC ret = ::GetProcAddress(_kernel, _name);
+	if (!ret && (_psapi != 0))
+		ret = ::GetProcAddress(_psapi, _name);
+	return ret;
+}
 
 #endif // RTM_PLATFORM_WINDOWS
 
@@ -164,6 +180,13 @@ uintptr_t symbolResolverCreateForCurrentProcess()
 {
 #if RTM_PLATFORM_WINDOWS
 
+	HMODULE kerneldll32	= ::GetModuleHandleA("kernel32");
+	HMODULE psapiDLL	= ::LoadLibraryA("Psapi.dll");
+
+	gFn_getModuleInformation	= (fnGetModuleInformation)loadFunc(kerneldll32, psapiDLL, "GetModuleInformation");
+	gFn_enumProcessModules		= (fnEnumProcessModules)  loadFunc(kerneldll32, psapiDLL, "EnumProcessModules");
+	gFn_getModuleFileNameExW	= (fnGetModuleFileNameExW)loadFunc(kerneldll32, psapiDLL, "GetModuleFileNameExW");
+
 	Toolchain toolchain;
 
 #if RTM_COMPILER_MSVC
@@ -193,16 +216,16 @@ uintptr_t symbolResolverCreateForCurrentProcess()
 			HMODULE hMods[1024];
 		    DWORD cbNeeded;
 
-		    if (EnumProcessModules(GetCurrentProcess(), hMods, sizeof(hMods), &cbNeeded))
+		    if (gFn_enumProcessModules(GetCurrentProcess(), hMods, sizeof(hMods), &cbNeeded))
 			{
 				for (uint32_t i=0; i<(cbNeeded/sizeof(HMODULE)); ++i)
 				{
 					wchar_t szModName[MAX_PATH];
 
 					MODULEINFO mi;
-					GetModuleInformation(GetCurrentProcess(), hMods[i], &mi, sizeof(mi) );
+					gFn_getModuleInformation(GetCurrentProcess(), hMods[i], &mi, sizeof(mi) );
 					
-			        if (GetModuleFileNameExW(GetCurrentProcess(), hMods[i], szModName, sizeof(szModName) / sizeof(wchar_t)))
+			        if (gFn_getModuleFileNameExW(GetCurrentProcess(), hMods[i], szModName, sizeof(szModName) / sizeof(wchar_t)))
 		            {
 						rtm::WideToMulti modulePath(szModName);
 
