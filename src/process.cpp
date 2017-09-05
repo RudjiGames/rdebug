@@ -125,12 +125,10 @@ bool processRun(const char* _cmdLine)
     memset(&startInfo, 0, sizeof(STARTUPINFOW));
     memset(&pInfo, 0, sizeof(PROCESS_INFORMATION));
     startInfo.cb = sizeof(STARTUPINFOW);
-	startInfo.dwFlags |= STARTF_USESHOWWINDOW;
-	startInfo.wShowWindow = SW_HIDE;
 
 	rtm::MultiToWide cmdLine(_cmdLine);
 
-	if (CreateProcessW(0, rtm::MultiToWide(_cmdLine), NULL, NULL, FALSE, 0, NULL, NULL, &startInfo, &pInfo) != TRUE)
+	if (CreateProcessW(0, cmdLine, NULL, NULL, FALSE, 0, NULL, NULL, &startInfo, &pInfo) != TRUE)
 		return false;
 
 	WaitForSingleObject(pInfo.hProcess, INFINITE);
@@ -194,7 +192,7 @@ void removeMarkers(char* _buffer, char* _outBuffer, DWORD& _outSize)
 	_outSize = (DWORD)strlen(origBuff);
 }
 
-BOOL createChildProcess(const char* _cmdLine, PipeHandles* _handles, bool _redirectIO)
+BOOL createChildProcess(const char* _cmdLine, PipeHandles* _handles, bool _redirectIO, rtm_string& _buffer)
 {
 	PROCESS_INFORMATION piProcInfo; 
 	STARTUPINFOW siStartInfo;
@@ -209,7 +207,11 @@ BOOL createChildProcess(const char* _cmdLine, PipeHandles* _handles, bool _redir
 		siStartInfo.hStdError	= _handles->m_stdOut_Write;
 		siStartInfo.hStdOutput	= _handles->m_stdOut_Write;
 		siStartInfo.hStdInput	= _handles->m_stdIn_Read;
-		siStartInfo.dwFlags		|= STARTF_USESTDHANDLES | STARTF_USESHOWWINDOW;
+		siStartInfo.dwFlags		= STARTF_USESTDHANDLES;
+	}
+	else
+	{
+		siStartInfo.dwFlags		= STARTF_USESTDHANDLES | STARTF_USESHOWWINDOW;
 		siStartInfo.wShowWindow	= SW_HIDE;
 	}
 
@@ -235,11 +237,12 @@ BOOL createChildProcess(const char* _cmdLine, PipeHandles* _handles, bool _redir
 			DWORD dwRead = 0;
 			DWORD w;
 			WriteFile(_handles->m_stdOut_Write, g_unblockMarker, (DWORD)strlen(g_unblockMarker), &w, NULL);
-			if ((w==4) && ReadFile(_handles->m_stdOut_Read, &buffer[0], g_bufferSize, &dwRead, NULL))
+			if ((w==5) && ReadFile(_handles->m_stdOut_Read, &buffer[0], g_bufferSize, &dwRead, NULL))
 			{
 				buffer[dwRead] = '\0';
 				removeMarkers(&buffer[0], &wbuffer[0], dwRead);
 				WriteFile(out, &wbuffer[0], dwRead, &written, NULL);
+				_buffer += buffer;
 			}
 			
 			if (!stillRunning)
@@ -274,23 +277,21 @@ void CreatePipes(PipeHandles* _handles)
 
 DWORD ReadFromPipe(rtm_string& _buffer, PipeHandles* _handles)
 { 
-	DWORD dwRead;
+	DWORD dwRead = 0;
 	BOOL bSuccess = FALSE;
 	HANDLE hParentStdOut = GetStdHandle(STD_OUTPUT_HANDLE);
 
-	char	utf8buffer[8192+1];
+	char utf8buffer[8192+1];
 	for (;;) 
 	{ 
-		bSuccess = ReadFile(_handles->m_stdOut_Read, utf8buffer, 8192, &dwRead, NULL);
+		DWORD bytesAvailable = 0;
+		PeekNamedPipe(_handles->m_stdOut_Read, NULL, 0, NULL, &bytesAvailable, NULL);
+		bSuccess = bytesAvailable && (ReadFile(_handles->m_stdOut_Read, utf8buffer, 8192, &dwRead, NULL) == TRUE);
 		if (!bSuccess)
 			break;
 
 		utf8buffer[dwRead] = '\0';
-
-		if (dwRead <= 8192*2)
-			_buffer += utf8buffer;
-		else
-			_buffer += '\0';
+		_buffer += utf8buffer;
 
 		if (dwRead < 8192)
 			break;
@@ -304,7 +305,7 @@ bool processGetOutputOf(const char* _cmdLine, rtm_string& _buffer, bool _redirec
 	PipeHandles handles;
 	CreatePipes(&handles);
 
-	BOOL success = createChildProcess(_cmdLine, &handles, _redirect);
+	BOOL success = createChildProcess(_cmdLine, &handles, _redirect, _buffer);
 	
 	if (!success)
 		return false;
@@ -317,7 +318,7 @@ char* processGetOutputOf(const char* _cmdLine, bool _redirectIO)
 {
 	rtm_string buffer;
 	processGetOutputOf(_cmdLine, buffer, _redirectIO);
-	size_t len = strlen(_cmdLine);
+	size_t len = strlen(buffer.c_str());
 	if (len)
 	{
 		char* res = (char*)rtm_alloc(sizeof(char) * (len + 1));
