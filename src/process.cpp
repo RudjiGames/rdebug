@@ -118,7 +118,7 @@ bool processInjectDLL(const char* _executablePath, const char* _DLLPath, const c
 	return true;
 }
 
-bool processRun(const char* _cmdLine)
+bool processRun(const char* _cmdLine, uint32_t* _exitCode)
 {
 	STARTUPINFOW startInfo;
 	PROCESS_INFORMATION pInfo;
@@ -132,18 +132,14 @@ bool processRun(const char* _cmdLine)
 		return false;
 
 	WaitForSingleObject(pInfo.hProcess, INFINITE);
-	DWORD exitCode=0;
-	bool ret = true;
-	if (GetExitCodeProcess(pInfo.hProcess, &exitCode))
-	{
-		if (exitCode != 0)
-			ret = false;
-	}
-	else
-		ret = false;
+	DWORD exitCode = 0;
+	GetExitCodeProcess(pInfo.hProcess, &exitCode);
+
+	if (_exitCode)
+		*_exitCode = exitCode;
 
 	CloseHandle(pInfo.hProcess);
-	return ret;
+	return true;
 }
 
 struct PipeHandles

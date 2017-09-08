@@ -116,7 +116,7 @@ namespace rdebug {
 	///
 	/// @param _cmdLine
 	///
-	bool		processRun(const char* _cmdLine);
+	bool		processRun(const char* _cmdLine, uint32_t* _exitCode = 0);
 
 	/// Run a new process and return the console output
 	///
