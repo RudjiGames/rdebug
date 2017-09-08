@@ -15,5 +15,5 @@ solution "rdebug"
 	configurations { "debug", "release", "retail" }
 	setPlatforms()
 
-	loadProject( "rdebug" )
+	loadProject("rdebug")
 

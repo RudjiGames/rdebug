@@ -15,26 +15,11 @@
 #pragma warning (disable: 4091) // 'typedef ': ignored on left of '' when no variable is declared
 #include <DbgHelp.h>
 #include <DIA/include/diacreate.h>
+#include <DIA/include/dia2.h>
 #pragma warning (default: 4091)
 #pragma comment(lib, "diaguids.lib")
 #else
 typedef uint16_t  __wchar_t;
-#endif
-
-#define RTM_DEFINE_GUID(name, l, w1, w2, b1, b2, b3, b4, b5, b6, b7, b8) const GUID name = { l, w1, w2, { b1, b2,  b3,  b4,  b5,  b6,  b7,  b8 } }
-RTM_DEFINE_GUID(CLSID_DiaSource120,			0x3BFCEA48, 0x620F, 0x4B6B, 0x81, 0xF7, 0xB9, 0xAF, 0x75, 0x45, 0x4C, 0x7D); // msdia 120
-RTM_DEFINE_GUID(CLSID_DiaSource140,			0xE6756135, 0x1E65, 0x4D17, 0x85, 0x76, 0x61, 0x07, 0x61, 0x39, 0x8C, 0x3C); // msdia 140
-
-#if !RTM_COMPILER_MSVC
-
-RTM_DEFINE_GUID(IID_IDiaLoadCallback2,		0x4688a074, 0x5a4d, 0x4486, 0xae, 0xa8, 0x7b, 0x90, 0x71, 0x1d, 0x9f, 0x7c);
-RTM_DEFINE_GUID(IID_IDiaLoadCallback,		0xc32adb82, 0x73f4, 0x421b, 0x95, 0xd5, 0xa4, 0x70, 0x6e, 0xdf, 0x5d, 0xbe);
-RTM_DEFINE_GUID(IID_IDiaDataSource,			0x79f1bb5f, 0xb66e, 0x48e5, 0xb6, 0xa9, 0x15, 0x45, 0xc3, 0x23, 0xca, 0x3d);
-
-HRESULT STDMETHODCALLTYPE NoRegCoCreate(const __wchar_t*, REFCLSID, REFIID, void**)
-{
-	return S_FALSE;
-}
 #endif // RTM_COMPILER_MSVC
 
 namespace rdebug {
@@ -100,13 +85,11 @@ class DiaLoadCallBack : public IDiaLoadCallback2
 HRESULT createDiaDataSource(void** _ptr)
 {
 	HRESULT hr = S_FALSE;
+	hr = ::CoCreateInstance(CLSID_DiaSource, 0, CLSCTX_INPROC_SERVER, IID_IDiaDataSource, _ptr);
 
 #if RTM_COMPILER_MSVC
 	if(FAILED(hr))	hr = NoRegCoCreate(L"msdia140.dll", __uuidof(DiaSource), __uuidof(IDiaDataSource), _ptr);
-	if(FAILED(hr))	hr = NoRegCoCreate(L"msdia120.dll", __uuidof(DiaSource), __uuidof(IDiaDataSource), _ptr);
 #endif // RTM_COMPILER_MSVC
-	if(FAILED(hr))	hr = ::CoCreateInstance(CLSID_DiaSource140, 0, CLSCTX_ALL, IID_IDiaDataSource, _ptr);
-	if(FAILED(hr))	hr = ::CoCreateInstance(CLSID_DiaSource120, 0, CLSCTX_ALL, IID_IDiaDataSource, _ptr);
 
 	return hr;
 }
