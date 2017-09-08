@@ -105,16 +105,7 @@ bool findSymbol(const char* _path, char _outSymbolPath[1024], const char* _symbo
 	
 	rtm::MultiToWide symbolStore(_symbolStore);
 
-	wchar_t symStoreBuffer[2048];
-	if (_symbolStore)
-	{
-		wcscpy(symStoreBuffer, symbolStore);
-	}
-	else
-	{
-		if (0 == GetEnvironmentVariableW(L"_NT_SYMBOL_PATH", (LPWSTR)symStoreBuffer, sizeof(symStoreBuffer)))
-			wcscpy(symStoreBuffer, L"");
-	}
+	wchar_t symStoreBuffer[4096];
 
 	char moduleNameM[512];
 	const char* srcPath = _path;
@@ -125,11 +116,30 @@ bool findSymbol(const char* _path, char _outSymbolPath[1024], const char* _symbo
 		strcpy(moduleNameM, rtm::WideToMulti(moduleName));
 		srcPath = moduleNameM;
 	}
+	else
+	{
+		const char* filename = rtm::pathGetFileName(_path);
+		char directory[512];
+		strcpy(directory, _path);
+		directory[filename - _path] = 0;
+		wcscpy(symStoreBuffer, rtm::MultiToWide(directory));
+		wcscat(symStoreBuffer, L";");
+	}
+
+	if (_symbolStore)
+	{
+		wcscat(symStoreBuffer, symbolStore);
+	}
+	else
+	{
+		size_t len = wcslen(symStoreBuffer);
+		GetEnvironmentVariableW(L"_NT_SYMBOL_PATH", (LPWSTR)&symStoreBuffer[len], sizeof(symStoreBuffer));
+	}
 
 	wchar_t outSymbolPath[1024];
 	DiaLoadCallBack callback(outSymbolPath);
 	callback.AddRef();
-	hr = pIDiaDataSource->loadDataForExe((LPOLESTR)srcPath, (LPOLESTR)symStoreBuffer, &callback);
+	hr = pIDiaDataSource->loadDataForExe((LPOLESTR)rtm::MultiToWide(srcPath), (LPOLESTR)symStoreBuffer, &callback);
 
 	if (FAILED(hr))
 	{
@@ -146,7 +156,7 @@ bool findSymbol(const char* _path, char _outSymbolPath[1024], const char* _symbo
 
 } // namespace rdebug
 
-const char*	s_PDB_File_Extension = ".pdb";
+const char*	s_PDB_File_Extension = "pdb";
 
 PDBFile::PDBFile() :
 	m_pIDiaDataSource( NULL ),
