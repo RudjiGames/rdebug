@@ -20,6 +20,11 @@
 #pragma comment(lib, "diaguids.lib")
 #else
 typedef uint16_t  __wchar_t;
+#include <guiddef.h>
+const GUID CLSID_DiaSource			= { 0X2735412E, 0X7F64, 0X5B0F, 0X8F, 0X00, 0X5D, 0X77, 0XAF, 0XBE, 0X26, 0X1E };
+const GUID IID_IDiaDataSource		= { 0X79F1BB5F, 0XB66E, 0X48E5, 0XB6, 0XA9, 0X15, 0X45, 0XC3, 0X23, 0XCA, 0X3D };
+const GUID IID_IDiaLoadCallback2	= {	0x4688A074, 0x5A4D, 0x4486, 0xAE, 0xA8, 0x7B, 0x90, 0x71, 0x1D, 0x9F, 0x7C };
+const GUID IID_IDiaLoadCallback		= { 0xC32ADB82, 0x73F4, 0x421B, 0x95, 0xD5, 0xA4, 0x70, 0x6E, 0xDF, 0x5D, 0xBE };
 #endif // RTM_COMPILER_MSVC
 
 namespace rdebug {
@@ -51,9 +56,9 @@ class DiaLoadCallBack : public IDiaLoadCallback2
 		if (ppUnk == 0)
 			return E_INVALIDARG;
 
-		if		(rid == IID_IDiaLoadCallback2)	*ppUnk = (IDiaLoadCallback2 *)this;
-		else if (rid == IID_IDiaLoadCallback)	*ppUnk = (IDiaLoadCallback *)this;
-		else if (rid == IID_IUnknown)			*ppUnk = (IUnknown *)this;
+		if		(rid == IID_IDiaLoadCallback2)	*ppUnk = (IDiaLoadCallback2*)this;
+		else if (rid == IID_IDiaLoadCallback)	*ppUnk = (IDiaLoadCallback*)this;
+		else if (rid == IID_IUnknown)			*ppUnk = (IUnknown*)this;
 		else									*ppUnk = 0;
 
 		if (*ppUnk != 0) 
@@ -84,8 +89,7 @@ class DiaLoadCallBack : public IDiaLoadCallback2
 
 HRESULT createDiaDataSource(void** _ptr)
 {
-	HRESULT hr = S_FALSE;
-	hr = ::CoCreateInstance(CLSID_DiaSource, 0, CLSCTX_INPROC_SERVER, IID_IDiaDataSource, _ptr);
+	HRESULT hr = ::CoCreateInstance(CLSID_DiaSource, 0, CLSCTX_INPROC_SERVER, IID_IDiaDataSource, _ptr);
 
 #if RTM_COMPILER_MSVC
 	if(FAILED(hr))	hr = NoRegCoCreate(L"msdia140.dll", __uuidof(DiaSource), __uuidof(IDiaDataSource), _ptr);
