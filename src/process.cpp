@@ -74,8 +74,7 @@ bool processInjectDLL(const char* _executablePath, const char* _DLLPath, const c
 	wcscat(cmdLine, L" ");
 	wcscat(cmdLine, rtm::MultiToWide(_cmdLine));
 
-	if (CreateProcessW(0, cmdLine, NULL, NULL, FALSE,	
-				CREATE_SUSPENDED, NULL, rtm::MultiToWide(_workingDir), &startInfo, &pInfo) != TRUE)
+	if (CreateProcessW(0, cmdLine, NULL, NULL, FALSE, CREATE_SUSPENDED, NULL, rtm::MultiToWide(_workingDir), &startInfo, &pInfo) != TRUE)
 		return false;
 
 	if (!acquireDebugPrivileges(pInfo.hProcess))
@@ -118,13 +117,19 @@ bool processInjectDLL(const char* _executablePath, const char* _DLLPath, const c
 	return true;
 }
 
-bool processRun(const char* _cmdLine, uint32_t* _exitCode)
+bool processRun(const char* _cmdLine, bool _hideWindow, uint32_t* _exitCode)
 {
 	STARTUPINFOW startInfo;
 	PROCESS_INFORMATION pInfo;
     memset(&startInfo, 0, sizeof(STARTUPINFOW));
     memset(&pInfo, 0, sizeof(PROCESS_INFORMATION));
     startInfo.cb = sizeof(STARTUPINFOW);
+
+	if (_hideWindow)
+	{
+		startInfo.dwFlags		= STARTF_USESHOWWINDOW;
+		startInfo.wShowWindow	= SW_HIDE;
+	}
 
 	rtm::MultiToWide cmdLine(_cmdLine);
 
@@ -196,20 +201,18 @@ BOOL createChildProcess(const char* _cmdLine, PipeHandles* _handles, bool _redir
  
 	ZeroMemory( &piProcInfo, sizeof(PROCESS_INFORMATION) );
 	ZeroMemory( &siStartInfo, sizeof(STARTUPINFOW) );
-	siStartInfo.cb = sizeof(STARTUPINFOW); 
+	siStartInfo.cb = sizeof(STARTUPINFOW);
 
 	if (_redirectIO)
 	{
 		siStartInfo.hStdError	= _handles->m_stdOut_Write;
 		siStartInfo.hStdOutput	= _handles->m_stdOut_Write;
 		siStartInfo.hStdInput	= _handles->m_stdIn_Read;
-		siStartInfo.dwFlags		= STARTF_USESTDHANDLES;
-	}
-	else
-	{
 		siStartInfo.dwFlags		= STARTF_USESTDHANDLES | STARTF_USESHOWWINDOW;
 		siStartInfo.wShowWindow	= SW_HIDE;
 	}
+	else
+		siStartInfo.dwFlags		= STARTF_USESTDHANDLES;
 
 	rtm::MultiToWide cmdLine(_cmdLine);
 	bSuccess = CreateProcessW(NULL, cmdLine.m_ptr, NULL, NULL, TRUE, 0, NULL, NULL, &siStartInfo, &piProcInfo);  
