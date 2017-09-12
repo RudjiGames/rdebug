@@ -61,7 +61,7 @@ bool acquireDebugPrivileges(HANDLE _process)
 	return success;
 }
 
-bool processInjectDLL(const char* _executablePath, const char* _DLLPath, const char* _cmdLine, const char* _workingDir)
+bool processInjectDLL(const char* _executablePath, const char* _DLLPath, const char* _cmdLine, const char* _workingDir, uint32_t* _pid)
 {
 	STARTUPINFOW startInfo;
 	PROCESS_INFORMATION pInfo;
@@ -114,6 +114,9 @@ bool processInjectDLL(const char* _executablePath, const char* _DLLPath, const c
 	}
 
 	ResumeThread(pInfo.hThread);
+	if (_pid)
+		*_pid = pInfo.dwProcessId;
+
 	return true;
 }
 

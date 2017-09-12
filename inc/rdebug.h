@@ -110,7 +110,7 @@ namespace rdebug {
 	/// @param _cmdLine
 	/// @param _workingDir
 	///
-	bool		processInjectDLL(const char* _executablePath, const char* _DLLPath, const char* _cmdLine, const char* _workingDir);
+	bool		processInjectDLL(const char* _executablePath, const char* _DLLPath, const char* _cmdLine, const char* _workingDir, uint32_t* _pid = 0);
 
 	/// Create and run a new process given the command line
 	///
