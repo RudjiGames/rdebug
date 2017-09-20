@@ -55,13 +55,12 @@ void parsePlayStationSymbolInfo(char* _str, StackFrame& _frame);
 void parseSymbolMapGNU(char*  _buffer, SymbolMap& _symMap);
 void parseSymbolMapPS3(char*  _buffer, SymbolMap& _symMap);
 
-uintptr_t symbolResolverCreate(ModuleInfo* _moduleInfos, uint32_t _numInfos, Toolchain* _tc)
+uintptr_t symbolResolverCreate(ModuleInfo* _moduleInfos, uint32_t _numInfos, Toolchain* _tc, const char* _executable)
 {
-	RTM_ASSERT(_moduleInfos, "Module info array can't be NULL");
-	RTM_ASSERT(_tc, "Toolchain description can't be NULL");
+	RTM_ASSERT(_moduleInfos || _tc, "Either module info array or toolchain desc can't be NULL");
 
 	ResolveInfo* info = rtm_new<ResolveInfo>();
-	const char* _executablePath = 0;
+	const char* executablePath = 0;
 
 	for (uint32_t i=0; i<_numInfos; ++i)
 	{
@@ -79,12 +78,15 @@ uintptr_t symbolResolverCreate(ModuleInfo* _moduleInfos, uint32_t _numInfos, Too
 		const char* ext = rtm::pathGetExt(tmpName);
 		if (ext && 
 			((strcmp(ext, "EXE") == 0) || (strcmp(ext, "ELF") == 0)))
-			_executablePath = _moduleInfos[i].m_modulePath;
+			executablePath = _moduleInfos[i].m_modulePath;
 
 		info->m_modules.push_back(module);
 	}
 
-	info->m_executablePath	= info->scratch(_executablePath);
+	if (!executablePath)
+		executablePath = _executable;
+
+	info->m_executablePath	= info->scratch(executablePath);
 	info->m_executableName	= rtm::pathGetFileName(info->m_executablePath);
 	info->m_tc_type			= _tc->m_type;
 
@@ -105,12 +107,11 @@ uintptr_t symbolResolverCreate(ModuleInfo* _moduleInfos, uint32_t _numInfos, Too
 	if (_tc->m_type == rdebug::Toolchain::GCC)
 	{
 		append_nm	= "\" -C --print-size --numeric-sort --line-numbers \"";
-		append_nm	+= _executablePath;
+		append_nm	+= executablePath;
 		append_nm	+= "\"";
 
-//		append_a2l	= " -f -C -e \"";
 		append_a2l	= "\" -f -e \"";
-		append_a2l	+= _executablePath;
+		append_a2l	+= executablePath;
 		append_a2l	+= "\" 0x%x";
 
 		append_cppf	= "\" -t -n ";
@@ -119,11 +120,11 @@ uintptr_t symbolResolverCreate(ModuleInfo* _moduleInfos, uint32_t _numInfos, Too
 	if (_tc->m_type == rdebug::Toolchain::PS3SNC)
 	{
 		append_nm	= "\" -dsy \"";
-		append_nm	+= _executablePath;
+		append_nm	+= executablePath;
 		append_nm	+= "\"";
 
 		append_a2l	= "\" -a2l 0x%x -i \"";
-		append_a2l	+= _executablePath;
+		append_a2l	+= executablePath;
 		append_a2l	+= "\"";
 
 		append_cppf	= "\" -t -n ";
@@ -258,7 +259,7 @@ uintptr_t symbolResolverCreateForCurrentProcess()
 		CloseHandle(snapshot);
 	}
 
-	return symbolResolverCreate(&modules[0], modules.size(), &toolchain);
+	return symbolResolverCreate(&modules[0], modules.size(), &toolchain, 0);
 #else
 	return 0;
 #endif
@@ -379,9 +380,9 @@ void loadPDB(Module& _module, const char* _symbolStore)
 
 void symbolResolverGetFrame(uintptr_t _resolver, uint64_t _address, StackFrame* _frame)
 {
-	_frame->m_moduleName[0] = '\0';
-	_frame->m_file[0] = '\0';
-	_frame->m_func[0] = '\0';
+	strcpy(_frame->m_moduleName, "Unknown");
+	strcpy(_frame->m_file, "Unknown");
+	strcpy(_frame->m_func, "Unknown");
 	_frame->m_line = 0;
 
 	ResolveInfo* info = (ResolveInfo*)_resolver;
@@ -412,7 +413,7 @@ void symbolResolverGetFrame(uintptr_t _resolver, uint64_t _address, StackFrame* 
 #else
 		sprintf(cmdline, /*4096*2,*/ info->m_tc_addr2line, _address - info->m_baseAddress4addr2Line);
 #endif
-		char* procOut = processGetOutputOf(cmdline);
+		char* procOut = processGetOutputOf(cmdline, true);
 		if (procOut)
 		{
 			info->m_parseSym(&procOut[0], *_frame);
@@ -427,7 +428,7 @@ void symbolResolverGetFrame(uintptr_t _resolver, uint64_t _address, StackFrame* 
 #else
 				sprintf(cmdline, /*4096 * 2,*/ "%s%s", info->m_tc_cppfilt, _frame->m_func);
 #endif
-				procOut = processGetOutputOf(cmdline);
+				procOut = processGetOutputOf(cmdline, true);
 				if (procOut)
 				{
 					size_t len = strlen(procOut);
@@ -479,7 +480,7 @@ uint64_t symbolResolverGetAddressID(uintptr_t _resolver, uint64_t _address, bool
 		char cmdline[4096*2];
 		strcpy(cmdline, info->m_tc_nm);
 
-		char* procOut = processGetOutputOf(cmdline);
+		char* procOut = processGetOutputOf(cmdline, true);
 
 		if (procOut)
 		{
