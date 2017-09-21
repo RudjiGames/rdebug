@@ -16,7 +16,6 @@ namespace rdebug {
 
 #if RTM_PLATFORM_WINDOWS
 
-const char* g_unblockMarker	= "<rtm>";
 const DWORD g_bufferSize	= 4096*160;
 
 bool processIs64bitBinary(const char* _path)
@@ -174,28 +173,6 @@ struct PipeHandles
 	}
 };
 
-void removeMarkers(char* _buffer, char* _outBuffer, DWORD& _outSize)
-{
-	char* origBuff = _outBuffer;
-	char* nextMarker;
-	do
-	{
-		nextMarker = strstr(_buffer, g_unblockMarker);
-		if (nextMarker)
-		{
-			strncpy(_outBuffer, _buffer, nextMarker-_buffer);
-			_outBuffer += nextMarker - _buffer;
-			_buffer = nextMarker + strlen(g_unblockMarker);
-		}
-		else
-		{
-			strcpy(_outBuffer,_buffer);
-		}
-	}
-	while (nextMarker);
-	_outSize = (DWORD)strlen(origBuff);
-}
-
 BOOL createChildProcess(const char* _cmdLine, PipeHandles* _handles, bool _redirectIO, rtm_string& _buffer)
 {
 	PROCESS_INFORMATION piProcInfo; 
@@ -226,25 +203,23 @@ BOOL createChildProcess(const char* _cmdLine, PipeHandles* _handles, bool _redir
 		h[0] = piProcInfo.hThread;
 		h[1] = piProcInfo.hProcess;
 
-		DWORD written;
 		rtm_string buffer, wbuffer;
 		buffer.reserve(g_bufferSize);
 		wbuffer.reserve(g_bufferSize);
-		HANDLE out = GetStdHandle(STD_OUTPUT_HANDLE); 
 		
 		for (;;)
 		{
 			bool stillRunning = (WaitForSingleObject(piProcInfo.hProcess,0) == WAIT_TIMEOUT);
 			
 			DWORD dwRead = 0;
-			DWORD w;
-			WriteFile(_handles->m_stdOut_Write, g_unblockMarker, (DWORD)strlen(g_unblockMarker), &w, NULL);
-			if ((w==5) && ReadFile(_handles->m_stdOut_Read, &buffer[0], g_bufferSize, &dwRead, NULL))
+			DWORD bytesAvailable = 0;
+			PeekNamedPipe(_handles->m_stdOut_Read, NULL, 0, NULL, &bytesAvailable, NULL);
+			bSuccess = bytesAvailable && (ReadFile(_handles->m_stdOut_Read, &buffer[0], g_bufferSize, &dwRead, NULL) == TRUE);
+
+			if (bSuccess)
 			{
 				buffer[dwRead] = '\0';
-				removeMarkers(&buffer[0], &wbuffer[0], dwRead);
-				WriteFile(out, &wbuffer[0], dwRead, &written, NULL);
-				_buffer += buffer;
+				_buffer += buffer.c_str();
 			}
 			
 			if (!stillRunning)

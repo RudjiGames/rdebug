@@ -104,17 +104,23 @@ uintptr_t symbolResolverCreate(ModuleInfo* _moduleInfos, uint32_t _numInfos, Too
 	rtm_string append_a2l;
 	rtm_string append_cppf;
 
-	if (_tc->m_type == rdebug::Toolchain::GCC)
+	rtm_string quote;
+
+	if ((_tc->m_type == rdebug::Toolchain::GCC) ||
+		(_tc->m_type == rdebug::Toolchain::PS4))
 	{
-		append_nm	= "\" -C --print-size --numeric-sort --line-numbers \"";
-		append_nm	+= executablePath;
-		append_nm	+= "\"";
+		if (_tc->m_type == rdebug::Toolchain::GCC)
+			quote = "\"";
 
-		append_a2l	= "\" -f -e \"";
-		append_a2l	+= executablePath;
-		append_a2l	+= "\" 0x%x";
+		append_nm = "\" -C --print-size --numeric-sort --line-numbers " + quote;
+		append_nm += executablePath;
+		append_nm += quote;
 
-		append_cppf	= "\" -t -n ";
+		append_a2l = "\" -f -e " + quote;
+		append_a2l += executablePath;
+		append_a2l += quote + " 0x%x";
+
+		append_cppf = "\" -t -n ";
 	}
 
 	if (_tc->m_type == rdebug::Toolchain::PS3SNC)
@@ -137,7 +143,7 @@ uintptr_t symbolResolverCreate(ModuleInfo* _moduleInfos, uint32_t _numInfos, Too
 	append_cppf	= ".exe" + append_cppf;
 #endif
 
-	rtm_string quote("\"");
+	quote = "\"";
 
 	switch (_tc->m_type)
 	{
@@ -151,6 +157,7 @@ uintptr_t symbolResolverCreate(ModuleInfo* _moduleInfos, uint32_t _numInfos, Too
 			break;
 
 		case rdebug::Toolchain::GCC:
+		case rdebug::Toolchain::PS4:
 			info->m_parseSym		= parseAddr2LineSymbolInfo;
 			info->m_parseSymMap		= parseSymbolMapGNU;
 			info->m_symbolStore		= 0;
@@ -390,6 +397,7 @@ void symbolResolverGetFrame(uintptr_t _resolver, uint64_t _address, StackFrame* 
 		return;
 
 #if RTM_PLATFORM_WINDOWS
+	if (info->m_tc_type == rdebug::Toolchain::MSVC)
 	for (uint32_t i = 0; i<info->m_modules.size(); ++i)
 	{
 		if (info->m_modules[i].m_module.checkAddress(_address))
@@ -417,6 +425,7 @@ void symbolResolverGetFrame(uintptr_t _resolver, uint64_t _address, StackFrame* 
 		if (procOut)
 		{
 			info->m_parseSym(&procOut[0], *_frame);
+			rtm::pathRemoveRelative(_frame->m_file);
 			processReleaseOutput(procOut);
 		}
 
