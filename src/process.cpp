@@ -322,9 +322,11 @@ bool processInjectDLL(const char* _executablePath, const char* _DLLPath, const c
 	return false;
 }
 
-bool processRun(const char* _cmdLine)
+bool processRun(const char* _cmdLine, bool _hideWindow, uint32_t* _exitCode)
 {
 	RTM_UNUSED(_cmdLine);
+	RTM_UNUSED(_hideWindow);
+	RTM_UNUSED(_exitCode);
 	return false;
 }
 
