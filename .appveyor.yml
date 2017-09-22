@@ -20,4 +20,4 @@ install:
   - ..\build\tools\windows\genie --file=genie\genie.lua %TOOLSET%
 
 build:
-  project: ../.build/windows/$(TOOLSET)/projects/rdebug/rdebug.sln
+  project: ../.build/windows/$(TOOLSET)/rdebug/projects/rdebug.sln
