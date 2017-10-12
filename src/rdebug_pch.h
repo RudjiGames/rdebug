@@ -10,7 +10,7 @@
 #define RTM_DEFINE_STL_STRING
 
 #include <rbase/inc/platform.h>
-#include <rbase/inc/strings.h>
+#include <rbase/inc/stringfn.h>
 #include <rbase/inc/winchar.h>
 #include <rbase/inc/libhandler.h>
 #include <rbase/inc/path.h>
