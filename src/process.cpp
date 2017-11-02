@@ -71,7 +71,7 @@ bool processInjectDLL(const char* _executablePath, const char* _DLLPath, const c
 	wchar_t cmdLine[32768];
 	wcscpy(cmdLine, rtm::MultiToWide(_executablePath));
 	wcscat(cmdLine, L" ");
-	wcscat(cmdLine, rtm::MultiToWide(_cmdLine));
+	wcscat(cmdLine, rtm::MultiToWide(_cmdLine, false));
 
 	if (CreateProcessW(0, cmdLine, NULL, NULL, FALSE, CREATE_SUSPENDED, NULL, rtm::MultiToWide(_workingDir), &startInfo, &pInfo) != TRUE)
 		return false;
@@ -133,7 +133,7 @@ bool processRun(const char* _cmdLine, bool _hideWindow, uint32_t* _exitCode)
 		startInfo.wShowWindow	= SW_HIDE;
 	}
 
-	rtm::MultiToWide cmdLine(_cmdLine);
+	rtm::MultiToWide cmdLine(_cmdLine, false);
 
 	if (CreateProcessW(0, cmdLine, NULL, NULL, FALSE, 0, NULL, NULL, &startInfo, &pInfo) != TRUE)
 		return false;
