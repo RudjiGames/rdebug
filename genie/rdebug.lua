@@ -3,6 +3,16 @@
 -- License: http://www.opensource.org/licenses/BSD-2-Clause
 --
 
+function projectLink_DIA()
+	configuration {"windows", "x32", "not gmake" }
+		libdirs { getProjectPath("DIA", ProjectPath.Root) .. "DIA/lib/x32/" }
+		links {"diaguids"}
+	configuration {"windows", "x64", "not gmake" }
+		libdirs { getProjectPath("DIA", ProjectPath.Root) .. "DIA/lib/x64/" }
+		links {"diaguids"}
+	configuration {}		
+end
+
 function projectDependencies_rdebug()
 	return { "DIA", "rbase" }
 end
