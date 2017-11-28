@@ -17,7 +17,6 @@
 #include <DIA/include/diacreate.h>
 #include <DIA/include/dia2.h>
 #pragma warning (default: 4091)
-#pragma comment(lib, "diaguids.lib")
 #else
 typedef uint16_t  __wchar_t;
 #include <guiddef.h>
