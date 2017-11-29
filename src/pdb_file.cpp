@@ -26,6 +26,41 @@ const GUID IID_IDiaLoadCallback2	= {	0x4688A074, 0x5A4D, 0x4486, 0xAE, 0xA8, 0x7
 const GUID IID_IDiaLoadCallback		= { 0xC32ADB82, 0x73F4, 0x421B, 0x95, 0xD5, 0xA4, 0x70, 0x6E, 0xDF, 0x5D, 0xBE };
 #endif // RTM_COMPILER_MSVC
 
+
+#ifndef UNDNAME_COMPLETE
+#define UNDNAME_COMPLETE                 (0x0000)  // Enable full undecoration
+#define UNDNAME_NO_LEADING_UNDERSCORES   (0x0001)  // Remove leading underscores from MS extended keywords
+#define UNDNAME_NO_MS_KEYWORDS           (0x0002)  // Disable expansion of MS extended keywords
+#define UNDNAME_NO_FUNCTION_RETURNS      (0x0004)  // Disable expansion of return type for primary declaration
+#define UNDNAME_NO_ALLOCATION_MODEL      (0x0008)  // Disable expansion of the declaration model
+#define UNDNAME_NO_ALLOCATION_LANGUAGE   (0x0010)  // Disable expansion of the declaration language specifier
+#define UNDNAME_NO_MS_THISTYPE           (0x0020)  // NYI Disable expansion of MS keywords on the 'this' type for primary declaration
+#define UNDNAME_NO_CV_THISTYPE           (0x0040)  // NYI Disable expansion of CV modifiers on the 'this' type for primary declaration
+#define UNDNAME_NO_THISTYPE              (0x0060)  // Disable all modifiers on the 'this' type
+#define UNDNAME_NO_ACCESS_SPECIFIERS     (0x0080)  // Disable expansion of access specifiers for members
+#define UNDNAME_NO_THROW_SIGNATURES      (0x0100)  // Disable expansion of 'throw-signatures' for functions and pointers to functions
+#define UNDNAME_NO_MEMBER_TYPE           (0x0200)  // Disable expansion of 'static' or 'virtual'ness of members
+#define UNDNAME_NO_RETURN_UDT_MODEL      (0x0400)  // Disable expansion of MS model for UDT returns
+#define UNDNAME_32_BIT_DECODE            (0x0800)  // Undecorate 32-bit decorated names
+#define UNDNAME_NAME_ONLY                (0x1000)  // Crack only the name for primary declaration;
+
+#define UNDNAME_NO_ARGUMENTS             (0x2000)  // Don't undecorate arguments to function
+#define UNDNAME_NO_SPECIAL_SYMS          (0x4000)  // Don't undecorate special names (v-table, vcall, vector xxx, metatype, etc)
+#endif
+
+#define UND_CODE (					\
+	UNDNAME_NO_THROW_SIGNATURES		| \
+	UNDNAME_NO_SPECIAL_SYMS			| \
+	UNDNAME_NO_MEMBER_TYPE			| \
+	UNDNAME_COMPLETE				| \
+	UNDNAME_NO_LEADING_UNDERSCORES	| \
+	UNDNAME_NO_THISTYPE				| \
+	UNDNAME_NO_ACCESS_SPECIFIERS	| \
+	UNDNAME_NO_ALLOCATION_LANGUAGE	| \
+	UNDNAME_NO_ALLOCATION_MODEL		| \
+	UNDNAME_32_BIT_DECODE			| \
+	0)
+
 namespace rdebug {
 
 class DiaLoadCallBack : public IDiaLoadCallback2
@@ -234,129 +269,54 @@ bool PDBFile::load(const char* _filename)
 	{
 		m_sFileName = _filename;
 
-		IDiaEnumSymbols* compilands;
-		HRESULT hr = m_pIDiaSymbol->findChildren(SymTagCompiland, 0, 0, &compilands);
-		RTM_ASSERT(hr == S_OK, "Unable to find PDB's compilands.");
-		if (hr != S_OK)
-			return bRet;
+		IDiaEnumSymbolsByAddr* symbols = 0;
+		HRESULT hr = m_pIDiaSession->getSymbolsByAddr(&symbols);
+		if (hr != S_OK) return false;
 
-		IDiaSymbol* currCompiland;
+		IDiaSymbol* symbolba = 0;
+		hr = symbols->symbolByAddr(1, 0, &symbolba);
+		if (hr != S_OK) return false;
+
+		IDiaSymbol* currFunction = 0;
 		DWORD numSymbolsFetched;
-		for(HRESULT moreChildren = compilands->Next(1, &currCompiland, &numSymbolsFetched);
-			moreChildren == S_OK; moreChildren = compilands->Next(1, &currCompiland, &numSymbolsFetched))
+		for(HRESULT moreChildren = symbols->Next(1, &currFunction, &numSymbolsFetched);
+			moreChildren == S_OK; moreChildren = symbols->Next(1, &currFunction, &numSymbolsFetched))
+
 		{
 			BSTR pName;
-			hr = currCompiland->get_name(&pName);
-			std::wstring compilandName;
-			if(hr == S_OK)
-			{
-				compilandName = pName;
-				SysFreeString(pName);
-			}
-			else
-			{
-				compilandName = L"Unknown";
-			}
+			rdebug::Symbol symbol;
 
-			IDiaEnumSymbols* functions;
-			IDiaSymbol* currFunction;
-			if (!m_isStripped)
-				hr = currCompiland->findChildren(SymTagFunction, 0, 0, &functions);
-			else
-				hr = currCompiland->findChildren(SymTagPublicSymbol, 0, 0, &functions);
+			symbol.m_file = "";
+			symbol.m_name = "";
+
+			DWORD address;
+			hr = currFunction->get_relativeVirtualAddress(&address);
+			symbol.m_offset = address;
 
 			if(hr != S_OK)
 			{
-				currCompiland->Release();
+				currFunction->Release();
 				continue;
 			}
-			
-			for(HRESULT moreFuncs = functions->Next(1, &currFunction, &numSymbolsFetched);
-				moreFuncs == S_OK; moreFuncs = functions->Next(1, &currFunction, &numSymbolsFetched))
-			{
-				rdebug::Symbol symbol;
-
-				rtm::WideToMulti compilandNameMulti(compilandName.c_str());
-				symbol.m_file = compilandNameMulti.m_ptr;
-				hr = currFunction->get_name(&pName);
-				if(hr == S_OK)
-				{
-					rtm::WideToMulti symbolNameMulti(pName);
-					symbol.m_name = symbolNameMulti.m_ptr;
-					SysFreeString(pName);
-				}
-				else
-				{
-					symbol.m_name = "Unknown";
-				}
-
-				DWORD address;
-				hr = currFunction->get_relativeVirtualAddress(&address);
-				symbol.m_offset = address;
-
-				if(hr != S_OK)
-				{
-					currFunction->Release();
-					continue;
-				}
 		
-				unsigned long long	length;
-				hr = currFunction->get_length(&length);
-				if(hr != S_OK)
-				{
-					currFunction->Release();
-					continue;
-				}
-				symbol.m_size = length;
-			
-				m_symMap.addSymbol(symbol);
+			unsigned long long	length;
+			hr = currFunction->get_length(&length);
+			if(hr != S_OK)
+			{
 				currFunction->Release();
+				continue;
 			}
+			symbol.m_size = length;
 			
-			functions->Release();
-			currCompiland->Release();
+			m_symMap.addSymbol(symbol);
+			currFunction->Release();
 		}
-		compilands->Release();
 	}
 
 	m_symMap.sort();
 
 	return bRet;
 }
-
-#ifndef UNDNAME_COMPLETE
-#define UNDNAME_COMPLETE                 (0x0000)  // Enable full undecoration
-#define UNDNAME_NO_LEADING_UNDERSCORES   (0x0001)  // Remove leading underscores from MS extended keywords
-#define UNDNAME_NO_MS_KEYWORDS           (0x0002)  // Disable expansion of MS extended keywords
-#define UNDNAME_NO_FUNCTION_RETURNS      (0x0004)  // Disable expansion of return type for primary declaration
-#define UNDNAME_NO_ALLOCATION_MODEL      (0x0008)  // Disable expansion of the declaration model
-#define UNDNAME_NO_ALLOCATION_LANGUAGE   (0x0010)  // Disable expansion of the declaration language specifier
-#define UNDNAME_NO_MS_THISTYPE           (0x0020)  // NYI Disable expansion of MS keywords on the 'this' type for primary declaration
-#define UNDNAME_NO_CV_THISTYPE           (0x0040)  // NYI Disable expansion of CV modifiers on the 'this' type for primary declaration
-#define UNDNAME_NO_THISTYPE              (0x0060)  // Disable all modifiers on the 'this' type
-#define UNDNAME_NO_ACCESS_SPECIFIERS     (0x0080)  // Disable expansion of access specifiers for members
-#define UNDNAME_NO_THROW_SIGNATURES      (0x0100)  // Disable expansion of 'throw-signatures' for functions and pointers to functions
-#define UNDNAME_NO_MEMBER_TYPE           (0x0200)  // Disable expansion of 'static' or 'virtual'ness of members
-#define UNDNAME_NO_RETURN_UDT_MODEL      (0x0400)  // Disable expansion of MS model for UDT returns
-#define UNDNAME_32_BIT_DECODE            (0x0800)  // Undecorate 32-bit decorated names
-#define UNDNAME_NAME_ONLY                (0x1000)  // Crack only the name for primary declaration;
-
-#define UNDNAME_NO_ARGUMENTS             (0x2000)  // Don't undecorate arguments to function
-#define UNDNAME_NO_SPECIAL_SYMS          (0x4000)  // Don't undecorate special names (v-table, vcall, vector xxx, metatype, etc)
-#endif
-
-#define UND_CODE (					\
-	UNDNAME_NO_THROW_SIGNATURES		| \
-	UNDNAME_NO_SPECIAL_SYMS			| \
-	UNDNAME_NO_MEMBER_TYPE			| \
-	UNDNAME_COMPLETE				| \
-	UNDNAME_NO_LEADING_UNDERSCORES	| \
-	UNDNAME_NO_THISTYPE				| \
-	UNDNAME_NO_ACCESS_SPECIFIERS	| \
-	UNDNAME_NO_ALLOCATION_LANGUAGE	| \
-	UNDNAME_NO_ALLOCATION_MODEL		| \
-	UNDNAME_32_BIT_DECODE			| \
-	0)
 
 void PDBFile::getSymbolByAddress(uint64_t _address, rdebug::StackFrame& _frame)
 {
