@@ -368,6 +368,8 @@ void PDBFile::getSymbolByAddress(uint64_t _address, rdebug::StackFrame& _frame)
 	{
 		IDiaSymbol* sym = NULL;
 
+		_address -= 1;	// get address of previous instruction
+
 		if (!m_isStripped)
 			m_pIDiaSession->findSymbolByVA((ULONGLONG)_address, SymTagFunction, &sym);
 		else
