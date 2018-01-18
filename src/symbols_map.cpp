@@ -98,7 +98,8 @@ void SymbolMap::sort()
 		++it;
 	}
 
-	std::remove_if(m_symbols.begin(), m_symbols.end(), isInvalid);
+	auto itInvalid = std::remove_if(m_symbols.begin(), m_symbols.end(), isInvalid);
+	m_symbols.erase(itInvalid, m_symbols.end());
 }
 
 } // namespace rdebug
