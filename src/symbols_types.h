@@ -39,7 +39,7 @@ struct Module
 struct ResolveInfo
 {
 	static const uint32_t SCRATCH_MEM_SIZE	= 64*1024;
-	static const uint32_t MAX_MODULES		= 256;
+	static const uint32_t MAX_MODULES		= 512;
 
 	typedef rtm::FixedArray<Module, MAX_MODULES> ModuleArray;
 
