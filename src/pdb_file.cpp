@@ -109,6 +109,14 @@ class DiaLoadCallBack : public IDiaLoadCallback2
 	{
 		if (_resultCode == S_OK)
 			wcscpy(m_buffer, _pdbPath);
+#if RTM_DEBUG
+		else
+		{
+			OutputDebugStringW(L"Try open \"");
+			OutputDebugStringW(_pdbPath);
+			OutputDebugStringW(L"\" failed.\n");
+		}
+#endif
 		return S_OK;
 	}
 	HRESULT STDMETHODCALLTYPE NotifyOpenDBG(LPCOLESTR, HRESULT) { return S_OK; }
@@ -128,7 +136,6 @@ HRESULT createDiaDataSource(void** _ptr)
 #if RTM_COMPILER_MSVC
 	if(FAILED(hr))	hr = NoRegCoCreate(L"msdia140.dll", __uuidof(DiaSource), __uuidof(IDiaDataSource), _ptr);
 #endif // RTM_COMPILER_MSVC
-
 	return hr;
 }
 
@@ -140,11 +147,15 @@ bool findSymbol(const char* _path, char _outSymbolPath[1024], const char* _symbo
 	
 	if(FAILED(hr))
 		return false;
-	
-	rtm::MultiToWide symbolStore(_symbolStore);
+
+	// The local file path must use '\\', and http(s) url must use '/'
+	// Do not change the the slashes only if you detect each part in the _symbolStore.
+	rtm::MultiToWide symbolStore(_symbolStore, false);
 
 	wchar_t symStoreBuffer[4096];
 
+	// The file path is not needed in the search path, loadDataForExe will find from src path automatily.
+	// The semicolon is necessary between each path (or srv*).
 	char moduleNameM[512];
 	const char* srcPath = _path;
 	if (!srcPath || (strlen(srcPath) == 0))
@@ -154,19 +165,10 @@ bool findSymbol(const char* _path, char _outSymbolPath[1024], const char* _symbo
 		strcpy(moduleNameM, rtm::WideToMulti(moduleName));
 		srcPath = moduleNameM;
 	}
-	else
-	{
-		const char* filename = rtm::pathGetFileName(_path);
-		char directory[512];
-		strcpy(directory, _path);
-		directory[filename - _path] = 0;
-		wcscpy(symStoreBuffer, rtm::MultiToWide(directory));
-		wcscat(symStoreBuffer, L";");
-	}
 
 	if (_symbolStore)
 	{
-		wcscat(symStoreBuffer, symbolStore);
+		wcscpy(symStoreBuffer, symbolStore);
 	}
 	else
 	{
