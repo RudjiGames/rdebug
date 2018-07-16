@@ -415,9 +415,9 @@ void symbolResolverGetFrame(uintptr_t _resolver, uint64_t _address, StackFrame* 
 	{
 		strcpy(_frame->m_moduleName, info->m_executableName);
 
-		char cmdline[4096 * 2];
+		char cmdline[8192 * 2];
 #if RTM_PLATFORM_WINDOWS && RTM_COMPILER_MSVC
-		sprintf_s(cmdline, 4096 * 2, info->m_tc_addr2line, _address - info->m_baseAddress4addr2Line);
+		sprintf_s(cmdline, 8192 * 2, info->m_tc_addr2line, _address - info->m_baseAddress4addr2Line);
 #else
 		sprintf(cmdline, /*4096*2,*/ info->m_tc_addr2line, _address - info->m_baseAddress4addr2Line);
 #endif
