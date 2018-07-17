@@ -285,7 +285,6 @@ bool PDBFile::load(const char* _filename)
 			moreChildren == S_OK; moreChildren = symbols->Next(1, &currFunction, &numSymbolsFetched))
 
 		{
-			BSTR pName;
 			rdebug::Symbol symbol;
 
 			symbol.m_file = "";
