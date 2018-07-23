@@ -18,7 +18,7 @@ function projectDependencies_rdebug()
 end
 
 
-function rdebugDisableWarningsForMinGW()
+function projectExtraConfig_rdebug()
 	configuration { "gmake" }
 		if "mingw-gcc" == _OPTIONS["gcc"] then -- on windows, we patch heap functions, no need to wrap malloc family of funcs
 			buildoptions { "-Wno-unknown-pragmas" }
@@ -27,6 +27,6 @@ function rdebugDisableWarningsForMinGW()
 end
 
 function projectAdd_rdebug()
-	addProject_lib("rdebug", Lib.Tool, false, nil, rdebugDisableWarningsForMinGW)
+	addProject_lib("rdebug", Lib.Tool, false, nil)
 end
 
