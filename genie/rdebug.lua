@@ -27,6 +27,6 @@ function projectExtraConfig_rdebug()
 end
 
 function projectAdd_rdebug()
-	addProject_lib("rdebug", Lib.Tool, false, nil)
+	addProject_lib("rdebug", Lib.Tool)
 end
 
