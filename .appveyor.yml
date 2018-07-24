@@ -17,7 +17,7 @@ install:
   - git clone --depth 1 https://github.com/milostosic/build ..\build
   - git clone --depth 1 https://github.com/milostosic/rbase ..\rbase
   - git clone --depth 1 https://github.com/milostosic/DIA ..\DIA
-  - ..\build\tools\windows\genie --file=genie\genie.lua %TOOLSET%
+  - ..\build\tools\bin\windows\genie --file=genie\genie.lua %TOOLSET%
 
 build:
   project: ../.build/windows/$(TOOLSET)/rdebug/projects/rdebug.sln
