@@ -1,5 +1,5 @@
 //--------------------------------------------------------------------------//
-/// Copyright (c) 2017 by Milos Tosic. All Rights Reserved.                /// 
+/// Copyright (c) 2018 by Milos Tosic. All Rights Reserved.                ///
 /// License: http://www.opensource.org/licenses/BSD-2-Clause               ///
 //--------------------------------------------------------------------------//
 
@@ -194,7 +194,7 @@ BOOL createChildProcess(const char* _cmdLine, PipeHandles* _handles, bool _redir
 	else
 		siStartInfo.dwFlags		= STARTF_USESTDHANDLES;
 
-	rtm::MultiToWide cmdLine(_cmdLine);
+	rtm::MultiToWide cmdLine(_cmdLine, false);
 	bSuccess = CreateProcessW(NULL, cmdLine.m_ptr, NULL, NULL, TRUE, 0, NULL, NULL, &siStartInfo, &piProcInfo);  
 
 	if (bSuccess) 
