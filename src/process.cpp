@@ -86,7 +86,7 @@ bool processInjectDLL(const char* _executablePath, const char* _DLLPath, const c
 
 	char dllPath[2048];
 	strcpy(dllPath, _DLLPath);
-	rtm::pathRemoveRelative(dllPath);
+	rtm::pathMakeAbsolute(dllPath);
 
 	rtm::MultiToWide dllPathWide(dllPath);
 	size_t dllPathLen = wcslen(dllPathWide) + 1;

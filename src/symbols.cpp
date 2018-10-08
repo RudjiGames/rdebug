@@ -425,7 +425,7 @@ void symbolResolverGetFrame(uintptr_t _resolver, uint64_t _address, StackFrame* 
 		if (procOut)
 		{
 			info->m_parseSym(&procOut[0], *_frame);
-			rtm::pathRemoveRelative(_frame->m_file);
+			rtm::pathMakeAbsolute(_frame->m_file);
 			processReleaseOutput(procOut);
 		}
 
