@@ -279,10 +279,12 @@ bool PDBFile::load(const char* _filename)
 		hr = symbols->symbolByAddr(1, 0, &symbolba);
 		if (hr != S_OK) return false;
 
+		IDiaSymbol* prevFunction = 0;
 		IDiaSymbol* currFunction = 0;
 		DWORD numSymbolsFetched;
-		for(HRESULT moreChildren = symbols->Next(1, &currFunction, &numSymbolsFetched);
-			moreChildren == S_OK; moreChildren = symbols->Next(1, &currFunction, &numSymbolsFetched))
+		for (HRESULT moreChildren = symbols->Next(1, &currFunction, &numSymbolsFetched);
+			(moreChildren == S_OK) && (prevFunction != currFunction);
+			 moreChildren = symbols->Next(1, &currFunction, &numSymbolsFetched), prevFunction = currFunction)
 
 		{
 			rdebug::Symbol symbol;
