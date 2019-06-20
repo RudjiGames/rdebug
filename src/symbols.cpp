@@ -6,6 +6,7 @@
 #include <rdebug_pch.h>
 #include <rdebug/src/pdb_file.h>
 #include <rdebug/src/symbols_types.h>
+#include <rbase/inc/console.h>
 
 #if RTM_PLATFORM_WINDOWS
 #define WIN32_LEAN_AND_MEAN
@@ -176,7 +177,7 @@ uintptr_t symbolResolverCreate(ModuleInfo* _moduleInfos, uint32_t _numInfos, Too
 			break;
 
 		case rdebug::Toolchain::Unknown:
-			RTM_ERROR("Should not reach here!");
+			rtm::Console::info("Toolchain is not configured, no symbols can be resolved!\n");
 	};
 
 	return (uintptr_t)info;
