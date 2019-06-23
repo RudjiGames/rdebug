@@ -154,7 +154,7 @@ bool findSymbol(const char* _path, char _outSymbolPath[1024], const char* _symbo
 
 	wchar_t symStoreBuffer[4096];
 
-	// The file path is not needed in the search path, loadDataForExe will find from src path automatily.
+	// The file path is not needed in the search path, loadDataForExe will find from src path automatically.
 	// The semicolon is necessary between each path (or srv*).
 	char moduleNameM[512];
 	const char* srcPath = _path;
@@ -179,16 +179,34 @@ bool findSymbol(const char* _path, char _outSymbolPath[1024], const char* _symbo
 	wchar_t outSymbolPath[1024];
 	DiaLoadCallBack callback(outSymbolPath);
 	callback.AddRef();
+
+	wcscpy(symStoreBuffer, L"srv*D:\\symbol_cache*d:\\MTunerTest\\dist");
+
 	hr = pIDiaDataSource->loadDataForExe((LPOLESTR)rtm::MultiToWide(srcPath), (LPOLESTR)symStoreBuffer, &callback);
 
 	if (FAILED(hr))
 	{
 		pIDiaDataSource->Release();
+
+		// Hacky desperate attempt to find PDB file where EXE resides
+		const char* exe = rtm::strStr(srcPath, ".exe");
+		if (exe)
+		{
+			char pdb[512];
+			rtm::strlCpy(pdb, 512, srcPath);
+			rtm::strlCpy(&pdb[exe-srcPath], 512 - uint32_t(exe-srcPath), ".pdb");
+			if (INVALID_FILE_ATTRIBUTES != GetFileAttributesA(pdb))
+			{
+				rtm::strlCpy(_outSymbolPath, 1024, pdb);
+				return true;
+			}
+		}
+
 		return false;
 	}
 
 	rtm::WideToMulti result(outSymbolPath);
-	strcpy(_outSymbolPath, result);
+	rtm::strlCpy(_outSymbolPath, 1024, result);
 	
 	pIDiaDataSource->Release();
 	return true;
@@ -333,10 +351,8 @@ void PDBFile::getSymbolByAddress(uint64_t _address, rdebug::StackFrame& _frame)
 
 		_address -= 1;	// get address of previous instruction
 
-		if (!m_isStripped)
-			m_pIDiaSession->findSymbolByVA((ULONGLONG)_address, SymTagFunction, &sym);
-		else
-			m_pIDiaSession->findSymbolByVA((ULONGLONG)_address, SymTagPublicSymbol, &sym);
+		if (!sym)	m_pIDiaSession->findSymbolByVA((ULONGLONG)_address, SymTagFunction, &sym);
+		if (!sym)	m_pIDiaSession->findSymbolByVA((ULONGLONG)_address, SymTagPublicSymbol, &sym);
 
 		if (sym)
 		{
