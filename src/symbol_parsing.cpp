@@ -7,8 +7,6 @@
 #include <rdebug/src/pdb_file.h>
 #include <rdebug/src/symbols_types.h>
 
-#include <string.h>
-
 namespace rdebug {
 
 inline static bool charIsDigit(char _c)
@@ -36,34 +34,36 @@ inline static bool charIsSpace(char _c)
 	return (_c == ' ');
 }
 
-void parseAddr2LineSymbolInfo(char* _str, StackFrame& _frame)
+void parseAddr2LineSymbolInfo(const char* _str, StackFrame& _frame)
 {
-	size_t len = strlen(_str);
+	size_t len = rtm::strLen(_str);
 
 	size_t l = len;
 	int idx = 0;
 	while (--l)
 	{
-		if (_str[l] == '\r') { _str[l] = '\0'; idx ++; }
-		if (_str[l] == '\n') _str[l] = '\0';
+		// ugly but we own the data
+		if (_str[l] == '\r') { const_cast<char*>(_str)[l] = '\0'; idx++; }
+		if (_str[l] == '\n') const_cast<char*>(_str)[l] = '\0';
+
 		if (idx == 2) break;
 	}
 
-	if (strcmp(_str,"??") != 0)
-		strcpy(_frame.m_func, _str);
+	if (rtm::strCmp(_str,"??") != 0)
+		rtm::strlCpy(_frame.m_func, sizeof(_frame.m_func), _str);
 
-	char* ptr = &_str[l+2];
-	if (strcmp(ptr,"??:0") != 0)
+	const char* ptr = &_str[l+2];
+	if (rtm::strCmp(ptr,"??:0") != 0)
 	{
-		strcpy(_frame.m_file, ptr);
-		len = strlen(_frame.m_file);
+		rtm::strlCpy(_frame.m_file, sizeof(_frame.m_file), ptr);
+		len = rtm::strLen(_frame.m_file);
 		while (_frame.m_file[--len] != ':');
 		_frame.m_file[len] = '\0';
 		_frame.m_line = atoi(&_frame.m_file[len+1]);
 	}
 }
 
-void parsePlayStationSymbolInfo(char* _str, StackFrame& _frame)
+void parsePlayStationSymbolInfo(const char* _str, StackFrame& _frame)
 {
 	const char* add = "Address:       ";
 	const char* dir = "Directory:     ";
@@ -71,34 +71,35 @@ void parsePlayStationSymbolInfo(char* _str, StackFrame& _frame)
 	const char* lin = "Line Number:   ";
 	const char* sym = "Symbol:        ";
 
-	char* address = strstr(_str, add);
-	char* directory = strstr(_str, dir);
-	char* file = strstr(_str, fil);
-	char* line = strstr(_str, lin);
-	char* symbol = strstr(_str, sym);
+	const char* address		= rtm::strStr(_str, add);
+	const char* directory	= rtm::strStr(_str, dir);
+	const char* file		= rtm::strStr(_str, fil);
+	const char* line		= rtm::strStr(_str, lin);
+	const char* symbol		= rtm::strStr(_str, sym);
 
 	if (address && directory && file && line && symbol)
 	{
-		size_t len = strlen(_str);
+		size_t len = rtm::strLen(_str);
 		while (--len)
 		{
-			if (_str[len] == '\r') _str[len] = '\0';
-			if (_str[len] == '\n') _str[len] = '\0';
+			// ugly but we own the data
+			if (_str[len] == '\r') const_cast<char*>(_str)[len] = '\0';
+			if (_str[len] == '\n') const_cast<char*>(_str)[len] = '\0';
 		}
 
-		size_t offset = strlen(add);
-		if ((strcmp(&directory[offset], "??") != 0) && (strcmp(&file[offset], "??") != 0))
+		size_t offset = rtm::strLen(add);
+		if ((rtm::strCmp(&directory[offset], "??") != 0) && (rtm::strCmp(&file[offset], "??") != 0))
 		{
-			strcpy(_frame.m_file, &directory[offset]);
-			strcat(_frame.m_file, "/");
-			strcat(_frame.m_file, &file[offset]);
+			rtm::strlCpy(_frame.m_file, RTM_NUM_ELEMENTS(_frame.m_file), &directory[offset]);
+			rtm::strlCat(_frame.m_file, RTM_NUM_ELEMENTS(_frame.m_file), "/");
+			rtm::strlCat(_frame.m_file, RTM_NUM_ELEMENTS(_frame.m_file), &file[offset]);
 		}
-		strcpy(_frame.m_func, &symbol[offset]);
+		rtm::strlCpy(_frame.m_func, RTM_NUM_ELEMENTS(_frame.m_func), &symbol[offset]);
 		_frame.m_line = atoi(&line[offset]);
 	}
 }
 
-void parseFile(rtm_string& _dst, uint32_t& _line, char*& _buffer)
+void parseFile(rtm_string& _dst, uint32_t& _line, const char*& _buffer)
 {
 	while (charIsBlank(*_buffer) && !charIsEOL(*_buffer)) ++_buffer;
 	while (!charIsEOL(*_buffer))
@@ -117,7 +118,7 @@ void parseFile(rtm_string& _dst, uint32_t& _line, char*& _buffer)
 	}
 }
 
-void parseSym(rtm_string& _dst, char*& _buffer)
+void parseSym(rtm_string& _dst, const char*& _buffer)
 {
 	while (charIsBlank(*_buffer) && !charIsEOL(*_buffer)) ++_buffer;
 	while (!charIsTab(*_buffer) && !charIsEOL(*_buffer))
@@ -154,9 +155,9 @@ uint64_t fromHex(char _c, bool& _stop)
 	return 0;
 }
 
-bool parseHex(uint64_t& _offset, char*& _buffer)
+bool parseHex(uint64_t& _offset, const char*& _buffer)
 {
-	char* buffer = _buffer;
+	const char* buffer = _buffer;
 	if (!buffer)
 	{
 		_offset = 0;
@@ -195,7 +196,7 @@ bool parseHex(uint64_t& _offset, char*& _buffer)
 	return true;
 }
 
-void parseSymbolMapLineGNU(char* _line, SymbolMap& _symMap)
+void parseSymbolMapLineGNU(const char* _line, SymbolMap& _symMap)
 {
 	// offset  [size] t/T symbol file:line
 	Symbol sym;
@@ -223,7 +224,7 @@ void parseSymbolMapLineGNU(char* _line, SymbolMap& _symMap)
 	_symMap.addSymbol(sym);
 }
 
-void parseSymbolMapLinePS3SNC(char* _line, SymbolMap& _symMap)
+void parseSymbolMapLinePS3SNC(const char* _line, SymbolMap& _symMap)
 {
 	// offset  scope Function segment symbol
 	Symbol sym;
@@ -236,7 +237,7 @@ void parseSymbolMapLinePS3SNC(char* _line, SymbolMap& _symMap)
 	while (!charIsSpace(*_line) && !charIsEOL(*_line)) ++_line;
 	while ( charIsSpace(*_line) && !charIsEOL(*_line)) ++_line;
 
-	if (strncmp(_line, "Function", strlen("Function")) != 0)
+	if (rtm::strCmp(_line, "Function", rtm::strLen("Function")) != 0)
 		return;
 
 	while (!charIsSpace(*_line) && !charIsEOL(*_line)) ++_line;
@@ -250,14 +251,14 @@ void parseSymbolMapLinePS3SNC(char* _line, SymbolMap& _symMap)
 	_symMap.addSymbol(sym);
 }
 
-void parseSymbolMapGNU(char* _buffer, SymbolMap& _symMap)
+void parseSymbolMapGNU(const char* _buffer, SymbolMap& _symMap)
 {
-	size_t len = strlen(_buffer);
+	size_t len = rtm::strLen(_buffer);
 	size_t pos = 0;
 
 	while (pos < len)
 	{
-		char* line = &_buffer[pos];
+		const char* line = &_buffer[pos];
 		
 		parseSymbolMapLineGNU(line, _symMap);
 		
@@ -271,14 +272,14 @@ void parseSymbolMapGNU(char* _buffer, SymbolMap& _symMap)
 	_symMap.sort();
 }
 
-void parseSymbolMapPS3(char* _buffer, SymbolMap& _symMap)
+void parseSymbolMapPS3(const char* _buffer, SymbolMap& _symMap)
 {
-	size_t len = strlen(_buffer);
+	size_t len = rtm::strLen(_buffer);
 	size_t pos = 0;
 
 	while (pos < len)
 	{
-		char* line = &_buffer[pos];
+		const char* line = &_buffer[pos];
 		
 		parseSymbolMapLinePS3SNC(line, _symMap);
 		

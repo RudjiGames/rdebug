@@ -50,11 +50,11 @@ namespace rdebug {
 
 namespace rdebug {
 
-void parseAddr2LineSymbolInfo(char* _str, StackFrame& _frame);
-void parsePlayStationSymbolInfo(char* _str, StackFrame& _frame);
+void parseAddr2LineSymbolInfo(const char* _str, StackFrame& _frame);
+void parsePlayStationSymbolInfo(const char* _str, StackFrame& _frame);
 
-void parseSymbolMapGNU(char*  _buffer, SymbolMap& _symMap);
-void parseSymbolMapPS3(char*  _buffer, SymbolMap& _symMap);
+void parseSymbolMapGNU(const char*  _buffer, SymbolMap& _symMap);
+void parseSymbolMapPS3(const char*  _buffer, SymbolMap& _symMap);
 
 uintptr_t symbolResolverCreate(ModuleInfo* _moduleInfos, uint32_t _numInfos, Toolchain* _tc, const char* _executable)
 {
@@ -70,15 +70,15 @@ uintptr_t symbolResolverCreate(ModuleInfo* _moduleInfos, uint32_t _numInfos, Too
 		module.m_moduleName	= rtm::pathGetFileName(module.m_module.m_modulePath);
 
 		char tmpName[1024];
-		strcpy(tmpName, module.m_moduleName); 
+		rtm::strlCpy(tmpName, RTM_NUM_ELEMENTS(tmpName), module.m_moduleName);
 		rtm::strToUpper(tmpName);
 
-		if ((strcmp(tmpName,"MTUNERDLL32.DLL") == 0) || (strcmp(tmpName,"MTUNERDLL64.DLL") == 0))
+		if ((rtm::strCmp(tmpName,"MTUNERDLL32.DLL") == 0) || (rtm::strCmp(tmpName,"MTUNERDLL64.DLL") == 0))
 			module.m_isRTMdll = true;
 
 		const char* ext = rtm::pathGetExt(tmpName);
 		if (ext && 
-			((strcmp(ext, "EXE") == 0) || (strcmp(ext, "ELF") == 0)))
+			((rtm::strCmp(ext, "EXE") == 0) || (rtm::strCmp(ext, "ELF") == 0)))
 			executablePath = _moduleInfos[i].m_modulePath;
 
 		info->m_modules.push_back(module);
@@ -205,12 +205,12 @@ uintptr_t symbolResolverCreateForCurrentProcess()
 	rtm::WideToMulti symStore(symStoreBuffer);
 
 	toolchain.m_type			= Toolchain::MSVC;
-	strcpy(toolchain.m_toolchainPath, symStore);
+	rtm::strlCpy(toolchain.m_toolchainPath, RTM_NUM_ELEMENTS(toolchain.m_toolchainPath), symStore);
 #else
 	toolchain.m_type			= Toolchain::GCC;
-	strcpy(toolchain.m_toolchainPath, "");
+	rtm::strlCpy(toolchain.m_toolchainPath, RTM_NUM_ELEMENTS(toolchain.m_toolchainPath), "");
 #endif
-	strcpy(toolchain.m_toolchainPrefix, "");
+	rtm::strlCpy(toolchain.m_toolchainPrefix, RTM_NUM_ELEMENTS(toolchain.m_toolchainPrefix), "");
 
 	ModuleInfoArray modules;
 
@@ -243,7 +243,7 @@ uintptr_t symbolResolverCreateForCurrentProcess()
 						ModuleInfo module;
 						module.m_baseAddress	= modBase;
 						module.m_size			= modSize;
-						strcpy(module.m_modulePath, modulePath.m_ptr);
+						rtm::strlCpy(module.m_modulePath, RTM_NUM_ELEMENTS(module.m_modulePath), modulePath.m_ptr);
 						modules.push_back(module);
 			        }
 			    }
@@ -259,7 +259,7 @@ uintptr_t symbolResolverCreateForCurrentProcess()
 			ModuleInfo module;
 			module.m_baseAddress	= modBase;
 			module.m_size			= modSize;
-			strcpy(module.m_modulePath, exePath.m_ptr);
+			rtm::strlCpy(module.m_modulePath, RTM_NUM_ELEMENTS(module.m_modulePath), exePath.m_ptr);
 			modules.push_back(module);
 			cap = Module32NextW(snapshot, &me);
 		}
@@ -295,6 +295,7 @@ ResolveInfo::ResolveInfo()
 	m_baseAddress4addr2Line = 0;
 	m_symbolStore			= 0;
 	m_symbolMapInitialized	= false;
+	m_symbolCache			= 0;
 }
 
 ResolveInfo::~ResolveInfo()
@@ -310,10 +311,10 @@ ResolveInfo::~ResolveInfo()
 char* ResolveInfo::scratch(const char* _str)
 {
 	RTM_ASSERT(_str != 0, "null string!");
-	size_t len = strlen(_str) + 1;
+	size_t len = rtm::strLen(_str) + 1;
 	RTM_ASSERT(m_scratchPos + len < SCRATCH_MEM_SIZE, "Scratch buffer full!");
 	char* ret = &m_scratch[m_scratchPos];
-	strcpy(ret, _str);
+	rtm::strlCpy(ret, SCRATCH_MEM_SIZE - m_scratchPos, _str);
 	m_scratchPos += (uint32_t)len;
 	return ret;
 }
@@ -379,7 +380,7 @@ void loadPDB(Module& _module, const char* _symbolStore)
 	{
 		_module.m_PDBFile = rtm_new<PDBFile>();
 		char symbolPath[1024];
-		strcpy(symbolPath, "");
+		rtm::strlCpy(symbolPath, RTM_NUM_ELEMENTS(symbolPath), "");
 		findSymbol(_module.m_module.m_modulePath, symbolPath, _symbolStore);
 		_module.m_PDBFile->load(symbolPath);
 	}
@@ -388,9 +389,9 @@ void loadPDB(Module& _module, const char* _symbolStore)
 
 void symbolResolverGetFrame(uintptr_t _resolver, uint64_t _address, StackFrame* _frame)
 {
-	strcpy(_frame->m_moduleName, "Unknown");
-	strcpy(_frame->m_file, "Unknown");
-	strcpy(_frame->m_func, "Unknown");
+	rtm::strlCpy(_frame->m_moduleName,	RTM_NUM_ELEMENTS(_frame->m_moduleName),	"Unknown");
+	rtm::strlCpy(_frame->m_file,		RTM_NUM_ELEMENTS(_frame->m_file),		"Unknown");
+	rtm::strlCpy(_frame->m_func,		RTM_NUM_ELEMENTS(_frame->m_func),		"Unknown");
 	_frame->m_line = 0;
 
 	ResolveInfo* info = (ResolveInfo*)_resolver;
@@ -406,15 +407,15 @@ void symbolResolverGetFrame(uintptr_t _resolver, uint64_t _address, StackFrame* 
 			Module& module = info->m_modules[i];
 			loadPDB(module, info->m_symbolStore);
 			module.m_PDBFile->getSymbolByAddress(_address - module.m_module.m_baseAddress, *_frame);
-			strcpy(_frame->m_moduleName, rtm::pathGetFileName(module.m_module.m_modulePath));
+			rtm::strlCpy(_frame->m_moduleName, RTM_NUM_ELEMENTS(_frame->m_moduleName), rtm::pathGetFileName(module.m_module.m_modulePath));
 			return;
 		}
 	}
 #endif // RTM_PLATFORM_WINDOWS
 
-	if (info->m_tc_addr2line && (strlen(info->m_tc_addr2line) != 0))
+	if (info->m_tc_addr2line && (rtm::strLen(info->m_tc_addr2line) != 0))
 	{
-		strcpy(_frame->m_moduleName, info->m_executableName);
+		rtm::strlCpy(_frame->m_moduleName, RTM_NUM_ELEMENTS(_frame->m_moduleName), info->m_executableName);
 
 		char cmdline[8192 * 2];
 #if RTM_PLATFORM_WINDOWS && RTM_COMPILER_MSVC
@@ -430,8 +431,8 @@ void symbolResolverGetFrame(uintptr_t _resolver, uint64_t _address, StackFrame* 
 			processReleaseOutput(procOut);
 		}
 
-		if (strcmp(_frame->m_func, "Unknown") != 0)
-			if (strlen(info->m_tc_cppfilt) != 0)
+		if (rtm::strCmp(_frame->m_func, "Unknown") != 0)
+			if (rtm::strLen(info->m_tc_cppfilt) != 0)
 			{
 #if RTM_PLATFORM_WINDOWS && RTM_COMPILER_MSVC
 				sprintf_s(cmdline, 4096 * 2, "%s%s", info->m_tc_cppfilt, _frame->m_func);
@@ -441,7 +442,7 @@ void symbolResolverGetFrame(uintptr_t _resolver, uint64_t _address, StackFrame* 
 				procOut = processGetOutputOf(cmdline, true);
 				if (procOut)
 				{
-					size_t len = strlen(procOut);
+					size_t len = rtm::strLen(procOut);
 					size_t s = 0;
 					while (s < len)
 					{
@@ -453,7 +454,7 @@ void symbolResolverGetFrame(uintptr_t _resolver, uint64_t _address, StackFrame* 
 						}
 						++s;
 					}
-					strcpy(_frame->m_func, procOut);
+					rtm::strlCpy(_frame->m_func, RTM_NUM_ELEMENTS(_frame->m_func), procOut);
 
 					processReleaseOutput(procOut);
 				}
@@ -485,12 +486,12 @@ uint64_t symbolResolverGetAddressID(uintptr_t _resolver, uint64_t _address, bool
 	}
 #endif // RTM_PLATFORM_WINDOWS
 
-	if (info->m_tc_nm && (strlen(info->m_tc_nm) != 0) && (!info->m_symbolMapInitialized))
+	if (info->m_tc_nm && (rtm::strLen(info->m_tc_nm) != 0) && (!info->m_symbolMapInitialized))
 	{
 		char cmdline[4096*2];
-		strcpy(cmdline, info->m_tc_nm);
+		rtm::strlCpy(cmdline, RTM_NUM_ELEMENTS(cmdline), info->m_tc_nm);
 
-		char* procOut = processGetOutputOf(cmdline, true);
+		const char* procOut = processGetOutputOf(cmdline, true);
 
 		if (procOut)
 		{

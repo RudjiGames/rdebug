@@ -158,11 +158,11 @@ bool findSymbol(const char* _path, char _outSymbolPath[1024], const char* _symbo
 	// The semicolon is necessary between each path (or srv*).
 	char moduleNameM[512];
 	const char* srcPath = _path;
-	if (!srcPath || (strlen(srcPath) == 0))
+	if (!srcPath || (rtm::strLen(srcPath) == 0))
 	{
 		wchar_t moduleName[512];
 		GetModuleFileNameW(NULL, moduleName, sizeof(wchar_t)*512);
-		strcpy(moduleNameM, rtm::WideToMulti(moduleName));
+		rtm::strlCpy(moduleNameM, RTM_NUM_ELEMENTS(moduleName), rtm::WideToMulti(moduleName));
 		srcPath = moduleNameM;
 	}
 
@@ -192,9 +192,9 @@ bool findSymbol(const char* _path, char _outSymbolPath[1024], const char* _symbo
 		const char* exe = rtm::strStr(srcPath, ".exe");
 		if (exe)
 		{
-			char pdb[512];
-			rtm::strlCpy(pdb, 512, srcPath);
-			rtm::strlCpy(&pdb[exe-srcPath], 512 - uint32_t(exe-srcPath), ".pdb");
+			char pdb[1024];
+			rtm::strlCpy(pdb, RTM_NUM_ELEMENTS(pdb), srcPath);
+			rtm::strlCpy(&pdb[exe-srcPath], RTM_NUM_ELEMENTS(pdb) - uint32_t(exe-srcPath), ".pdb");
 			if (INVALID_FILE_ATTRIBUTES != GetFileAttributesA(pdb))
 			{
 				rtm::strlCpy(_outSymbolPath, 1024, pdb);
@@ -251,7 +251,7 @@ void PDBFile::close()
 bool PDBFile::load(const char* _filename)
 {
 	if (!_filename) return false;
-	if (strlen(_filename) == 0) return false;
+	if (rtm::strLen(_filename) == 0) return false;
 
 	if (m_pIDiaDataSource == NULL)
 	{
@@ -264,7 +264,7 @@ bool PDBFile::load(const char* _filename)
 	bool bRet = false;
 
 	const char* ext = rtm::pathGetExt(_filename);
-	if (ext && (strcmp(ext, s_PDB_File_Extension)==0))
+	if (ext && (rtm::strCmp(ext, s_PDB_File_Extension)==0))
 	{
 		if (loadSymbolsFileWithoutValidation(_filename))
 		{
@@ -341,8 +341,8 @@ bool PDBFile::load(const char* _filename)
 
 void PDBFile::getSymbolByAddress(uint64_t _address, rdebug::StackFrame& _frame)
 {
-	strcpy(_frame.m_file, "Unknown");
-	strcpy(_frame.m_func, "Unknown");
+	rtm::strlCpy(_frame.m_file, RTM_NUM_ELEMENTS(_frame.m_file), "Unknown");
+	rtm::strlCpy(_frame.m_func, RTM_NUM_ELEMENTS(_frame.m_func), "Unknown");
 	_frame.m_line = 0;
 
 	if( m_pIDiaSession )
@@ -396,14 +396,14 @@ void PDBFile::getSymbolByAddress(uint64_t _address, rdebug::StackFrame& _frame)
 					_bstr_t a = SymName;
 					const wchar_t* nameC = a.operator const wchar_t*();
 					rtm::WideToMulti name(nameC);
-					strcpy(_frame.m_func, name.m_ptr);
+					rtm::strlCpy(_frame.m_func, RTM_NUM_ELEMENTS(_frame.m_func), name.m_ptr);
 
 					if (FileName)
 					{
 						a = FileName;
 						nameC = a.operator const wchar_t*();
 						rtm::WideToMulti file(nameC);
-						strcpy(_frame.m_file, file.m_ptr);
+						rtm::strlCpy(_frame.m_file, RTM_NUM_ELEMENTS(_frame.m_file), file.m_ptr);
 						_frame.m_line = LineNo;
 					}
 					else

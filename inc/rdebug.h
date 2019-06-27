@@ -98,7 +98,7 @@ namespace rdebug {
 	/// @param _executablePath
 	///
 	uint64_t	symbolResolverGetAddressID(uintptr_t _resolver, uint64_t _address, bool* _isRTMdll = 0);
-	
+
 	/// Returns true if binary at the given path is 64bit
 	///
 	/// @param _path
