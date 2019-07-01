@@ -63,6 +63,8 @@ uintptr_t symbolResolverCreate(ModuleInfo* _moduleInfos, uint32_t _numInfos, Too
 	ResolveInfo* info = rtm_new<ResolveInfo>();
 	const char* executablePath = 0;
 
+	const char* exeName = _executable ? rtm::pathGetFileName(_executable) : 0;
+
 	for (uint32_t i=0; i<_numInfos; ++i)
 	{
 		Module module;
@@ -76,10 +78,17 @@ uintptr_t symbolResolverCreate(ModuleInfo* _moduleInfos, uint32_t _numInfos, Too
 		if ((rtm::strCmp(tmpName,"MTUNERDLL32.DLL") == 0) || (rtm::strCmp(tmpName,"MTUNERDLL64.DLL") == 0))
 			module.m_isRTMdll = true;
 
-		const char* ext = rtm::pathGetExt(tmpName);
-		if (ext && 
-			((rtm::strCmp(ext, "EXE") == 0) || (rtm::strCmp(ext, "ELF") == 0)))
-			executablePath = _moduleInfos[i].m_modulePath;
+		const char* ext		= rtm::pathGetExt(tmpName);
+
+		if (ext)
+		{
+			if ((rtm::strCmp(ext, "EXE") == 0) || (rtm::strCmp(ext, "ELF") == 0))
+				executablePath = _moduleInfos[i].m_modulePath;
+
+			if ((rtm::strCmp(module.m_moduleName, exeName) == 0))
+				info->m_baseAddress4addr2Line = module.m_module.m_baseAddress;
+		}
+
 
 		info->m_modules.push_back(module);
 	}
@@ -88,18 +97,8 @@ uintptr_t symbolResolverCreate(ModuleInfo* _moduleInfos, uint32_t _numInfos, Too
 		executablePath = _executable;
 
 	info->m_executablePath	= info->scratch(executablePath);
-	info->m_executableName	= rtm::pathGetFileName(info->m_executablePath);
+	info->m_executableName	= info->m_executablePath ? rtm::pathGetFileName(info->m_executablePath) : 0;
 	info->m_tc_type			= _tc->m_type;
-
-	// nm				-C --print-size --numeric-sort --line-numbers [SYMBOL]
-	// addr2line		-f -C -e [SYMBOL] 0xAddress
-	// c++filt			-t -n [MANGLED NAME]
-
-	// PS3
-
-	// nm:				ps3bin.exe -dsy [SYMBOL]
-	// addr2Line:		ps3bin.exe + " -a2l 0x%x -i " + [SYMBOL]
-	// c++filt:			ps3name.exe [MANGLED NAME]
 
 	rtm_string append_nm;
 	rtm_string append_a2l;
@@ -413,7 +412,7 @@ void symbolResolverGetFrame(uintptr_t _resolver, uint64_t _address, StackFrame* 
 	}
 #endif // RTM_PLATFORM_WINDOWS
 
-	if (info->m_tc_addr2line && (rtm::strLen(info->m_tc_addr2line) != 0))
+	if (info->m_tc_addr2line && (info->m_tc_addr2line[0] != '\0'))
 	{
 		rtm::strlCpy(_frame->m_moduleName, RTM_NUM_ELEMENTS(_frame->m_moduleName), info->m_executableName);
 
@@ -469,7 +468,7 @@ uint64_t symbolResolverGetAddressID(uintptr_t _resolver, uint64_t _address, bool
 
 	ResolveInfo* info = (ResolveInfo*)_resolver;
 	if (!info)
-		return 0;
+		return _address;
 
 #if RTM_PLATFORM_WINDOWS
 	for (uint32_t i=0; i<info->m_modules.size(); ++i)
