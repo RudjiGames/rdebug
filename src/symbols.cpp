@@ -480,7 +480,7 @@ uint64_t symbolResolverGetAddressID(uintptr_t _resolver, uint64_t _address, bool
 			uintptr_t id = module.m_PDBFile->getSymbolID(_address - module.m_module.m_baseAddress);
 			if (_isRTMdll)
 				*_isRTMdll = module.m_isRTMdll;
-			return (id == 0) ? _address : id + module.m_module.m_baseAddress;
+			return id + module.m_module.m_baseAddress;
 		}
 	}
 #endif // RTM_PLATFORM_WINDOWS

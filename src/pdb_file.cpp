@@ -442,7 +442,7 @@ uintptr_t PDBFile::getSymbolID(uint64_t _address)
 	if (sym)
 		return (uintptr_t)sym->m_offset;
 	else
-		return 0;
+		return _address;
 }
 
 bool PDBFile::loadSymbolsFileWithoutValidation(const char* _PdbFileName)
