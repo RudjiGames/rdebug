@@ -436,13 +436,13 @@ void PDBFile::getSymbolByAddress(uint64_t _address, rdebug::StackFrame& _frame)
 	}
 }
 
-uintptr_t PDBFile::getSymbolID(uint64_t _address)
+uint64_t PDBFile::getSymbolID(uint64_t _address)
 {
 	rdebug::Symbol* sym = m_symMap.findSymbol(_address);
 	if (sym)
-		return (uintptr_t)sym->m_offset;
+		return (uint64_t)sym->m_offset;
 	else
-		return _address;
+		return (uint64_t)_address;
 }
 
 bool PDBFile::loadSymbolsFileWithoutValidation(const char* _PdbFileName)
