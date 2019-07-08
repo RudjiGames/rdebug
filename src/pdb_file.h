@@ -26,7 +26,6 @@ class PDBFile
 		IDiaSession*		m_pIDiaSession;
 		IDiaSymbol*			m_pIDiaSymbol;
 		bool				m_isStripped;
-		rdebug::SymbolMap	m_symMap;
 
 	public:
 		PDBFile();

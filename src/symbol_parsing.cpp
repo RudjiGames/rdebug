@@ -217,7 +217,7 @@ void parseSymbolMapLineGNU(const char* _line, SymbolMap& _symMap)
 
 	parseSym(sym.m_name, _line);
 	sym.m_offset	= offset;
-	sym.m_size			= size;
+	sym.m_size		= size;
 	
 	parseFile(sym.m_file, sym.m_line, _line);
 

@@ -7,6 +7,7 @@
 #include <rdebug/src/pdb_file.h>
 #include <rdebug/src/symbols_types.h>
 #include <rbase/inc/console.h>
+#include <rbase/inc/hash.h>
 
 #if RTM_PLATFORM_WINDOWS
 #define WIN32_LEAN_AND_MEAN
@@ -471,6 +472,7 @@ uint64_t symbolResolverGetAddressID(uintptr_t _resolver, uint64_t _address, bool
 		return _address;
 
 #if RTM_PLATFORM_WINDOWS
+	if (info->m_tc_type == rdebug::Toolchain::MSVC)
 	for (uint32_t i=0; i<info->m_modules.size(); ++i)
 	{
 		if (info->m_modules[i].m_module.checkAddress(_address))
@@ -503,7 +505,7 @@ uint64_t symbolResolverGetAddressID(uintptr_t _resolver, uint64_t _address, bool
 
 	rdebug::Symbol* sym = info->m_symbolMap.findSymbol(_address);
 	if (sym)
-		return (uintptr_t)sym->m_offset + info->m_baseAddress4addr2Line;
+		return (uint64_t)(rtm::hashStr(sym->m_name.c_str()));
 	else
 		return _address;
 }

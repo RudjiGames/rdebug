@@ -268,7 +268,7 @@ bool PDBFile::load(const char* _filename)
 	{
 		if (loadSymbolsFileWithoutValidation(_filename))
 		{
-			bRet = m_pIDiaSession->get_globalScope( &m_pIDiaSymbol )==S_OK?true:false;
+			bRet = m_pIDiaSession->get_globalScope( &m_pIDiaSymbol ) == S_OK ? true : false;
 
 			m_isStripped = false;
 			if( m_pIDiaSymbol )
@@ -284,57 +284,6 @@ bool PDBFile::load(const char* _filename)
 			RTM_ASSERT(bRet, "");
 		}
 	}
-
-	if (bRet)
-	{
-		m_sFileName = _filename;
-
-		IDiaEnumSymbolsByAddr* symbols = 0;
-		HRESULT hr = m_pIDiaSession->getSymbolsByAddr(&symbols);
-		if (hr != S_OK) return false;
-
-		IDiaSymbol* symbolba = 0;
-		hr = symbols->symbolByAddr(1, 0, &symbolba);
-		if (hr != S_OK) return false;
-
-		IDiaSymbol* prevFunction = 0;
-		IDiaSymbol* currFunction = 0;
-		DWORD numSymbolsFetched;
-		for (HRESULT moreChildren = symbols->Next(1, &currFunction, &numSymbolsFetched);
-			(moreChildren == S_OK) && (prevFunction != currFunction);
-			 moreChildren = symbols->Next(1, &currFunction, &numSymbolsFetched), prevFunction = currFunction)
-
-		{
-			rdebug::Symbol symbol;
-
-			symbol.m_file = "";
-			symbol.m_name = "";
-
-			DWORD address;
-			hr = currFunction->get_relativeVirtualAddress(&address);
-			symbol.m_offset = address;
-
-			if(hr != S_OK)
-			{
-				currFunction->Release();
-				continue;
-			}
-		
-			unsigned long long	length;
-			hr = currFunction->get_length(&length);
-			if(hr != S_OK)
-			{
-				currFunction->Release();
-				continue;
-			}
-			symbol.m_size = length;
-			
-			m_symMap.addSymbol(symbol);
-			currFunction->Release();
-		}
-	}
-
-	m_symMap.sort();
 
 	return bRet;
 }
@@ -438,11 +387,24 @@ void PDBFile::getSymbolByAddress(uint64_t _address, rdebug::StackFrame& _frame)
 
 uint64_t PDBFile::getSymbolID(uint64_t _address)
 {
-	rdebug::Symbol* sym = m_symMap.findSymbol(_address);
-	if (sym)
-		return (uint64_t)sym->m_offset;
-	else
-		return (uint64_t)_address;
+	DWORD ID = 0;
+	if (m_pIDiaSession)
+	{
+		IDiaSymbol* sym = NULL;
+
+		_address -= 1;	// get address of previous instruction
+
+		if (!sym)	m_pIDiaSession->findSymbolByVA((ULONGLONG)_address, SymTagFunction, &sym);
+		if (!sym)	m_pIDiaSession->findSymbolByVA((ULONGLONG)_address, SymTagPublicSymbol, &sym);
+
+		if (sym)
+		{
+			sym->get_symIndexId(&ID);
+			sym->Release();
+		}
+	}
+
+	return ID;
 }
 
 bool PDBFile::loadSymbolsFileWithoutValidation(const char* _PdbFileName)
