@@ -6,6 +6,7 @@
 #include <rdebug_pch.h>
 #include <rdebug/src/pdb_file.h>
 #include <rdebug/src/symbols_types.h>
+#include <rbase/inc/hash.h>
 
 namespace rdebug {
 
@@ -216,6 +217,7 @@ void parseSymbolMapLineGNU(const char* _line, SymbolMap& _symMap)
 		return;
 
 	parseSym(sym.m_name, _line);
+	sym.m_nameHash	= rtm::hashStr(sym.m_name.c_str());
 	sym.m_offset	= offset;
 	sym.m_size		= size;
 	
@@ -246,7 +248,8 @@ void parseSymbolMapLinePS3SNC(const char* _line, SymbolMap& _symMap)
 	while ( charIsSpace(*_line) && !charIsEOL(*_line)) ++_line;
 
 	parseSym(sym.m_name, _line);
-	sym.m_offset = (uint32_t)offset;
+	sym.m_offset	= (uint32_t)offset;
+	sym.m_nameHash	= rtm::hashStr(sym.m_name.c_str());
 
 	_symMap.addSymbol(sym);
 }

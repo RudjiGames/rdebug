@@ -10,10 +10,11 @@
 
 namespace rdebug {
 
-Symbol::Symbol() :
-	m_offset(0),
-	m_size(0),
-	m_line(0)
+Symbol::Symbol()
+	: m_offset(0)
+	, m_size(0)
+	, m_line(0)
+	, m_nameHash(0)
 {
 }
 
