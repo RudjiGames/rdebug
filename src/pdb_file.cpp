@@ -180,8 +180,6 @@ bool findSymbol(const char* _path, char _outSymbolPath[1024], const char* _symbo
 	DiaLoadCallBack callback(outSymbolPath);
 	callback.AddRef();
 
-	wcscpy(symStoreBuffer, L"srv*D:\\symbol_cache*d:\\MTunerTest\\dist");
-
 	hr = pIDiaDataSource->loadDataForExe((LPOLESTR)rtm::MultiToWide(srcPath), (LPOLESTR)symStoreBuffer, &callback);
 
 	if (FAILED(hr))
