@@ -71,7 +71,7 @@ namespace rdebug {
 	/// @param _tc
 	/// @param _executable
 	///
-	uintptr_t	symbolResolverCreate(ModuleInfo* _moduleInfos, uint32_t _numInfos, Toolchain* _tc, const char* _executable);
+	uintptr_t	symbolResolverCreate(ModuleInfo* _moduleInfos, uint32_t _numInfos, const char* _executable);
 
 	/// Creates debug symbol resolver based on 
 	///
