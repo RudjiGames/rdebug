@@ -501,7 +501,7 @@ void symbolResolverGetFrame(uintptr_t _resolver, uint64_t _address, StackFrame* 
 					sprintf(cmdline, /*4096*2,*/ resolver->m_tc_addr2line, _address - resolver->m_baseAddress4addr2Line);
 #endif
 					char* procOut = processGetOutputOf(cmdline, true);
-					if (procOut)
+					if (procOut && !rtm::strStr(procOut, "No such file"))
 					{
 						module.m_resolver->m_parseSym(&procOut[0], *_frame);
 						rtm::pathCanonicalize(_frame->m_file);
@@ -580,7 +580,8 @@ uint64_t symbolResolverGetAddressID(uintptr_t _resolver, uint64_t _address, bool
 
 					if (procOut)
 					{
-						module.m_resolver->m_parseSymMap(procOut, module.m_resolver->m_symbolMap);
+						if (!rtm::strStr(procOut, "No such file"))
+							module.m_resolver->m_parseSymMap(procOut, module.m_resolver->m_symbolMap);
 						module.m_resolver->m_symbolMapInitialized = true;
 
 						processReleaseOutput(procOut);
