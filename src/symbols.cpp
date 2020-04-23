@@ -39,10 +39,9 @@ uint32_t read32(FILE* _file, uint16_t _pos)
 
 int hasRichheader(char const* _filePath)
 {
-//	FILE* file = _fsopen(_filePath, "rb", _SH_DENYNO);
 	FILE* file = fopen(_filePath, "rb");
 	if (!file)
-		return 0;
+		return -1;
 
 	uint16_t mz = read16(file, 0);
 	if (mz != 0x5A4D)
@@ -155,8 +154,9 @@ uintptr_t symbolResolverCreate(ModuleInfo* _moduleInfos, uint32_t _numInfos, con
 		if ((rtm::strCmp(ext, "EXE") == 0) || (rtm::strCmp(ext, "DLL") == 0))
 		{
 #if RTM_PLATFORM_WINDOWS
-			bool hasRH = hasRichheader(module.m_module.m_modulePath) != 0;
-			module.m_module.m_toolchain.m_type = hasRH ? rdebug::Toolchain::MSVC : rdebug::Toolchain::GCC;
+			int hasRH = hasRichheader(module.m_module.m_modulePath);
+			if (hasRH >= 0)
+				module.m_module.m_toolchain.m_type = (hasRH == 1) ? rdebug::Toolchain::MSVC : rdebug::Toolchain::GCC;
 #endif // RTM_PLATFORM_WINDOWS
 		}
 
