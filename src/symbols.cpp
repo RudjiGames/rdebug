@@ -498,7 +498,7 @@ void symbolResolverGetFrame(uintptr_t _resolver, uint64_t _address, StackFrame* 
 #if RTM_PLATFORM_WINDOWS && RTM_COMPILER_MSVC
 					sprintf_s(cmdline, 8192 * 2, module.m_resolver->m_tc_addr2line, _address - module.m_resolver->m_baseAddress4addr2Line);
 #else
-					sprintf(cmdline, /*4096*2,*/ resolver->m_tc_addr2line, _address - resolver->m_baseAddress4addr2Line);
+					sprintf(cmdline, /*4096*2,*/ module.m_resolver->m_tc_addr2line, _address - module.m_resolver->m_baseAddress4addr2Line);
 #endif
 					char* procOut = processGetOutputOf(cmdline, true);
 					if (procOut && !rtm::strStr(procOut, "No such file"))
