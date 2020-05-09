@@ -351,6 +351,14 @@ uintptr_t symbolResolverCreateForCurrentProcess()
 void symbolResolverDelete(uintptr_t _resolver)
 {
 	Resolver* resolver = (Resolver*)_resolver;
+
+	for (uint32_t i=0; i<resolver->m_modules.size(); ++i)
+	{
+		Module& module = resolver->m_modules[i];
+		if (module.m_resolver)
+			rtm_delete<ResolveInfo>(module.m_resolver);
+	}
+
 	if (resolver)
 		rtm_delete<Resolver>(resolver);
 }
