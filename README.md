@@ -1,6 +1,5 @@
-<img src="https://github.com/milostosic/milostosic.github.io/raw/master/logo_libs/rdebug.png"/>
+<img src="http://rudji.com/images/libs/rdebug.png"/>
 
-[![Build Status](https://travis-ci.org/milostosic/rdebug.svg?branch=master)](https://travis-ci.org/milostosic/rdebug)
 [![Build status](https://ci.appveyor.com/api/projects/status/3cmmey9rd8qc512s?svg=true)](https://ci.appveyor.com/project/milostosic/rdebug)
 [![License](https://img.shields.io/badge/license-BSD--2%20clause-blue.svg)](https://github.com/milostosic/rdebug/blob/master/LICENSE)
 
