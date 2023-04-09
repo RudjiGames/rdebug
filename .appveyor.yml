@@ -58,6 +58,7 @@ for:
       - git clone --depth 1 https://github.com/milostosic/rdebug rdebug
       - git clone --depth 1 https://github.com/milostosic/build build
       - git clone --depth 1 https://github.com/milostosic/rbase rbase
+      - git clone --depth 1 https://github.com/milostosic/DIA DIA
      
     install:
       - build\tools\bin\windows\genie.exe --file=rdebug\genie\genie.lua vs2019
