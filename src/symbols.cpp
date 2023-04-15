@@ -502,11 +502,12 @@ void symbolResolverGetFrame(uintptr_t _resolver, uint64_t _address, StackFrame* 
 				{
 					rtm::strlCpy(_frame->m_moduleName, RTM_NUM_ELEMENTS(_frame->m_moduleName), module.m_resolver->m_executableName);
 
-					char cmdline[8192 * 2];
+					constexpr int MAX_CMDLINE_SIZE = 16384 + 8192;
+					char cmdline[MAX_CMDLINE_SIZE];
 #if RTM_PLATFORM_WINDOWS && RTM_COMPILER_MSVC
-					sprintf_s(cmdline, 8192 * 2, module.m_resolver->m_tc_addr2line, _address - module.m_resolver->m_baseAddress4addr2Line);
+					sprintf_s(cmdline, MAX_CMDLINE_SIZE, module.m_resolver->m_tc_addr2line, _address - module.m_resolver->m_baseAddress4addr2Line);
 #else
-					snprintf(cmdline, 8192 * 2, module.m_resolver->m_tc_addr2line, _address - module.m_resolver->m_baseAddress4addr2Line);
+					snprintf(cmdline, MAX_CMDLINE_SIZE, module.m_resolver->m_tc_addr2line, _address - module.m_resolver->m_baseAddress4addr2Line);
 #endif
 					char* procOut = processGetOutputOf(cmdline, true);
 					if (procOut && !rtm::strStr(procOut, "No such file"))
@@ -520,9 +521,9 @@ void symbolResolverGetFrame(uintptr_t _resolver, uint64_t _address, StackFrame* 
 						if (rtm::strLen(module.m_resolver->m_tc_cppfilt) != 0)
 						{
 #if RTM_PLATFORM_WINDOWS && RTM_COMPILER_MSVC
-							sprintf_s(cmdline, 4096 * 2, "%s%s", module.m_resolver->m_tc_cppfilt, _frame->m_func);
+							sprintf_s(cmdline, MAX_CMDLINE_SIZE, "%s%s", module.m_resolver->m_tc_cppfilt, _frame->m_func);
 #else
-							snprintf(cmdline, 4096 * 2, "%s%s", module.m_resolver->m_tc_cppfilt, _frame->m_func);
+							snprintf(cmdline, MAX_CMDLINE_SIZE, "%s%s", module.m_resolver->m_tc_cppfilt, _frame->m_func);
 #endif
 							procOut = processGetOutputOf(cmdline, true);
 							if (procOut)
