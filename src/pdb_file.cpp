@@ -153,6 +153,7 @@ bool findSymbol(const char* _path, char _outSymbolPath[1024], const char* _symbo
 	rtm::MultiToWide symbolStore(_symbolStore, false);
 
 	wchar_t symStoreBuffer[4096];
+	wcscpy(symStoreBuffer, L"");
 
 	// The file path is not needed in the search path, loadDataForExe will find from src path automatically.
 	// The semicolon is necessary between each path (or srv*).
@@ -166,11 +167,11 @@ bool findSymbol(const char* _path, char _outSymbolPath[1024], const char* _symbo
 		srcPath = moduleNameM;
 	}
 
-	if (_symbolStore)
+	if (symbolStore.size() > 1) // not ("" or null)
 	{
-		wcscpy(symStoreBuffer, symbolStore);
+		wcscat(symStoreBuffer, symbolStore);
 	}
-	else
+
 	{
 		size_t len = wcslen(symStoreBuffer);
 		GetEnvironmentVariableW(L"_NT_SYMBOL_PATH", (LPWSTR)&symStoreBuffer[len], sizeof(symStoreBuffer));
