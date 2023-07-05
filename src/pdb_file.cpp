@@ -139,7 +139,7 @@ HRESULT createDiaDataSource(void** _ptr)
 	return hr;
 }
 
-bool findSymbol(const char* _path, char _outSymbolPath[1024], const char* _symbolStore)
+bool findSymbol(const char* _path, char _outSymbolPath[2048], const char* _symbolStore)
 {
 	IDiaDataSource* pIDiaDataSource = NULL;
 
@@ -177,7 +177,7 @@ bool findSymbol(const char* _path, char _outSymbolPath[1024], const char* _symbo
 		GetEnvironmentVariableW(L"_NT_SYMBOL_PATH", (LPWSTR)&symStoreBuffer[len], sizeof(symStoreBuffer));
 	}
 
-	wchar_t outSymbolPath[1024];
+	wchar_t outSymbolPath[2048];
 	DiaLoadCallBack callback(outSymbolPath);
 	callback.AddRef();
 
@@ -191,12 +191,12 @@ bool findSymbol(const char* _path, char _outSymbolPath[1024], const char* _symbo
 		const char* exe = rtm::strStr(srcPath, ".exe");
 		if (exe)
 		{
-			char pdb[1024];
+			char pdb[2048];
 			rtm::strlCpy(pdb, RTM_NUM_ELEMENTS(pdb), srcPath);
 			rtm::strlCpy(&pdb[exe-srcPath], RTM_NUM_ELEMENTS(pdb) - uint32_t(exe-srcPath), ".pdb");
 			if (INVALID_FILE_ATTRIBUTES != GetFileAttributesA(pdb))
 			{
-				rtm::strlCpy(_outSymbolPath, 1024, pdb);
+				rtm::strlCpy(_outSymbolPath, 2048, pdb);
 				return true;
 			}
 		}
@@ -205,7 +205,7 @@ bool findSymbol(const char* _path, char _outSymbolPath[1024], const char* _symbo
 	}
 
 	rtm::WideToMulti result(outSymbolPath);
-	rtm::strlCpy(_outSymbolPath, 1024, result);
+	rtm::strlCpy(_outSymbolPath, 2048, result);
 	
 	pIDiaDataSource->Release();
 	return true;

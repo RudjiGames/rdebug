@@ -41,7 +41,7 @@ namespace rdebug {
 
 		inline bool checkAddress(uint64_t _address) const
 		{
-			return ((_address >= m_baseAddress) && (_address < (m_baseAddress + m_size)));
+			return (_address - m_baseAddress <= m_size);
 		}
 	};
 
@@ -53,6 +53,9 @@ namespace rdebug {
 		char		m_func[16384];			// very big in order to support dumb code (templates, lambdas and such)
 		uint32_t	m_line;
 	};
+
+	/// Module loading callback, called per module
+	typedef void (*module_load_cb)(const char* _name, void* _customData);
 
 	/// Initialize rdebug library
 	///
@@ -71,7 +74,7 @@ namespace rdebug {
 	/// @param _tc
 	/// @param _executable
 	///
-	uintptr_t	symbolResolverCreate(ModuleInfo* _moduleInfos, uint32_t _numInfos, const char* _executable);
+	uintptr_t	symbolResolverCreate(ModuleInfo* _moduleInfos, uint32_t _numInfos, const char* _executable, module_load_cb _callback = 0, void* _data = 0);
 
 	/// Creates debug symbol resolver based on 
 	///
@@ -95,9 +98,9 @@ namespace rdebug {
 	///
 	/// @param _resolver
 	/// @param _address
-	/// @param _executablePath
+	/// @param _skipCount
 	///
-	uint64_t	symbolResolverGetAddressID(uintptr_t _resolver, uint64_t _address, bool* _isRTMdll = 0);
+	uint64_t	symbolResolverGetAddressID(uintptr_t _resolver, uint64_t _address, int& _skipCount);
 
 	/// Returns true if binary at the given path is 64bit
 	///
