@@ -494,8 +494,8 @@ inline const Module* addressGetModule(uintptr_t _resolver, uint64_t _address)
 {
 	const Resolver* resolver = (Resolver*)_resolver;
 
-	uint32_t minIndex = 0;
-	uint32_t maxIndex = resolver->m_modules.size() - 1;
+	int32_t minIndex = 0;
+	int32_t maxIndex = resolver->m_modules.size() - 1;
 
 	while (minIndex <= maxIndex)
 	{
