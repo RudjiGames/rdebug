@@ -100,7 +100,7 @@ namespace rdebug {
 	/// @param _address
 	/// @param _skipCount
 	///
-	uint64_t	symbolResolverGetAddressID(uintptr_t _resolver, uint64_t _address, int& _skipCount);
+	uint64_t	symbolResolverGetAddressID(uintptr_t _resolver, uint64_t _address);
 
 	/// Returns true if binary at the given path is 64bit
 	///

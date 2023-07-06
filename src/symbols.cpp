@@ -160,13 +160,13 @@ uintptr_t symbolResolverCreate(ModuleInfo* _moduleInfos, uint32_t _numInfos, con
 		rtm::strlCpy(tmpName, RTM_NUM_ELEMENTS(tmpName), module.m_moduleName);
 		rtm::strToUpper(tmpName);
 
-		if ((rtm::strCmp(tmpName,"MTUNERDLL32.DLL") == 0) || (rtm::strCmp(tmpName,"MTUNERDLL64.DLL") == 0))
+		if ((rtm::striCmp(tmpName,"MTUNERDLL32.DLL") == 0) || (rtm::striCmp(tmpName,"MTUNERDLL64.DLL") == 0))
 			module.m_isRTMdll = true;
 
 		const char* ext		= rtm::pathGetExt(tmpName);
 
 		// on Windows, fix toolchain for each module
-		if ((rtm::strCmp(ext, "EXE") == 0) || (rtm::strCmp(ext, "DLL") == 0))
+		if ((rtm::striCmp(ext, "EXE") == 0) || (rtm::striCmp(ext, "DLL") == 0))
 		{
 #if RTM_PLATFORM_WINDOWS
 			int hasRH = hasRichheader(module.m_module.m_modulePath);
@@ -177,11 +177,11 @@ uintptr_t symbolResolverCreate(ModuleInfo* _moduleInfos, uint32_t _numInfos, con
 
 		if (ext)
 		{
-			if ((rtm::strCmp(ext, "EXE") == 0) || (rtm::strCmp(ext, "ELF") == 0))
+			if ((rtm::striCmp(ext, "EXE") == 0) || (rtm::striCmp(ext, "ELF") == 0))
 				executablePath = _moduleInfos[i].m_modulePath;
 
-			if (((rtm::strCmp(module.m_moduleName, exeName) == 0)) &&
-				!((rtm::strCmp(ext, "EXE") == 0) || (rtm::strCmp(ext, "DLL") == 0)))
+			if (((rtm::striCmp(module.m_moduleName, exeName) == 0)) &&
+				!((rtm::striCmp(ext, "EXE") == 0) || (rtm::striCmp(ext, "DLL") == 0)))
 					module.m_resolver->m_baseAddress4addr2Line = module.m_module.m_baseAddress;
 		}
 
@@ -590,7 +590,7 @@ void symbolResolverGetFrame(uintptr_t _resolver, uint64_t _address, StackFrame* 
 	}
 }
 
-uint64_t symbolResolverGetAddressID(uintptr_t _resolver, uint64_t _address, int& _skipCount)
+uint64_t symbolResolverGetAddressID(uintptr_t _resolver, uint64_t _address)
 {
 	Resolver* resolver = (Resolver*)_resolver;
 	if (!resolver)
@@ -600,12 +600,13 @@ uint64_t symbolResolverGetAddressID(uintptr_t _resolver, uint64_t _address, int&
 	if (!module)
 		return _address;
 
+	if (module->m_isRTMdll)
+		return 0;
+
 	if (module->m_module.m_toolchain.m_type == rdebug::Toolchain::MSVC)
 	{
 #if RTM_PLATFORM_WINDOWS
 		uint64_t id = module->m_resolver->m_PDBFile->getSymbolID(_address - module->m_module.m_baseAddress);
-		if (module->m_isRTMdll)
-			_skipCount++;
 		return id + module->m_module.m_baseAddress;
 #endif // RTM_PLATFORM_WINDOWS
 	}
