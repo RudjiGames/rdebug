@@ -290,7 +290,7 @@ bool PDBFile::load(const char* _filename)
 void PDBFile::getSymbolByAddress(uint64_t _address, rdebug::StackFrame& _frame)
 {
 	rtm::strlCpy(_frame.m_file, RTM_NUM_ELEMENTS(_frame.m_file), "Unknown");
-	rtm::strlCpy(_frame.m_func, RTM_NUM_ELEMENTS(_frame.m_func), "Unknown");
+	rdebug::addressToString(_address, _frame.m_func);
 	_frame.m_line = 0;
 
 	if( m_pIDiaSession )

@@ -135,6 +135,9 @@ namespace rdebug {
 	///
 	void		processReleaseOutput(const char* _output);
 
+	/// 
+	void		addressToString(uint64_t _address, char* _buffer);
+
 } // namespace rdebug
 
 #endif // RTM_DEBUG_H

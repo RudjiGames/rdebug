@@ -518,7 +518,7 @@ void symbolResolverGetFrame(uintptr_t _resolver, uint64_t _address, StackFrame* 
 {
 	rtm::strlCpy(_frame->m_moduleName, RTM_NUM_ELEMENTS(_frame->m_moduleName), "Unknown");
 	rtm::strlCpy(_frame->m_file, RTM_NUM_ELEMENTS(_frame->m_file), "Unknown");
-	rtm::strlCpy(_frame->m_func, RTM_NUM_ELEMENTS(_frame->m_func), "Unknown");
+	rdebug::addressToString(_address, _frame->m_func);
 	_frame->m_line = 0;
 
 	Resolver* resolver = (Resolver*)_resolver;

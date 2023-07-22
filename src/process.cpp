@@ -345,4 +345,21 @@ void processReleaseOutput(const char* _output)
 		rtm_free((void*)_output);
 }
 
+void addressToString(uint64_t _address, char* _buffer)
+{
+	union { uint64_t a; char h[8]; uint32_t d[2]; } c;
+	c.a = _address;
+	_buffer[0] = '0';
+	_buffer[1] = 'x';
+
+	int ptr = 2;
+	for (int i=c.d[1]?0:4; i<8; ++i)
+	{
+		char cc = c.h[7 - i];
+		_buffer[ptr++] = rtm::toHexNum((char)(cc >> 4));
+		_buffer[ptr++] = rtm::toHexNum((char)(cc & 0xf));
+	}
+	_buffer[ptr] = '\0';
+}
+
 } // namespace rdebug
