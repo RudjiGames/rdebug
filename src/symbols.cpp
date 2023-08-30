@@ -132,7 +132,7 @@ void loadPDB(Module& _module)
 	if (!_module.m_resolver->m_PDBFile)
 	{
 		_module.m_resolver->m_PDBFile = rtm_new<PDBFile>();
-		char symbolPath[1024];
+		char symbolPath[2048];
 		rtm::strlCpy(symbolPath, RTM_NUM_ELEMENTS(symbolPath), "");
 		findSymbol(_module.m_module.m_modulePath, symbolPath, _module.m_resolver->m_symbolStore);
 		_module.m_resolver->m_PDBFile->load(symbolPath);

@@ -7,6 +7,7 @@
 #define RTM_RDEBUG_PDB_H
 
 #include <rbase/inc/platform.h>
+#include <unordered_map>
 
 #if RTM_PLATFORM_WINDOWS
 
@@ -18,14 +19,53 @@
 #include <comdef.h>
 #include <DIA/include/dia2.h>
 
+struct FunctionSymbol
+{
+	std::string name;
+	uint32_t rva;
+	uint32_t size;
+	const PDB::CodeView::DBI::Record* frameProc;
+};
+
+struct Section
+{
+	uint16_t index;
+	uint32_t offset;
+	size_t   lineIndex;
+};
+
+struct Filename
+{
+	uint32_t fileChecksumOffset;
+	uint32_t namesFilenameOffset;
+	PDB::CodeView::DBI::ChecksumKind checksumKind;
+	uint8_t  checksumSize;
+	uint8_t  checksum[32];
+};
+
+struct Line
+{
+	uint32_t lineNumber;
+	uint32_t codeSize;
+	uint32_t rva;
+	size_t   filenameIndex;
+};
+
 class PDBFile
 {
 	private:
-		rtm_string			m_sFileName;
-		IDiaDataSource*		m_pIDiaDataSource;
-		IDiaSession*		m_pIDiaSession;
-		IDiaSymbol*			m_pIDiaSymbol;
-		bool				m_isStripped;
+		rtm_string									m_sFileName;
+		bool										m_isStripped;
+		MemoryMappedFile::Handle					m_pdbFile;
+		PDB::DBIStream								m_dbiStream;
+		PDB::TPIStream								m_tpiStream;
+		std::vector<FunctionSymbol>					m_functionSymbols;
+		//std::vector<LineSymbol>						m_lineSymbols;
+
+		std::vector<Section>						m_sections;
+		std::vector<Filename>						m_filenames;
+		std::vector<Line>							m_lines;
+		std::unordered_map<uint32_t, std::string>	m_filenames_map;
 
 	public:
 		PDBFile();
@@ -35,9 +75,6 @@ class PDBFile
 		void		getSymbolByAddress(uint64_t _address, rdebug::StackFrame& _frame);
 		uint64_t	getSymbolID(uint64_t _address);
 		void		close();
-
-	private:
-		bool		loadSymbolsFileWithoutValidation(const char* _PdbFileName);
 };
 
 #endif // RTM_PLATFORM_WINDOWS

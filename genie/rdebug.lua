@@ -4,7 +4,7 @@
 --
 
 function projectDependencies_rdebug()
-	return { "rbase" }
+	return { "rbase", "raw_pdb" }
 end
 
 function projectExtraConfigExecutable_rdebug()

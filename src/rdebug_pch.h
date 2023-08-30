@@ -17,5 +17,12 @@
 
 #include <rdebug/inc/rdebug.h>
 
-#endif // RTM_TOOLUTIL_TOOLUTIL_PCH_H
+#include <raw_pdb/src/PDB.h>
+#include <raw_pdb/src/PDB_DBIStream.h>
+#include <raw_pdb/src/PDB_InfoStream.h>
+#include <raw_pdb/src/Foundation/PDB_PointerUtil.h>
+#include <raw_pdb/src/PDB_RawFile.h>
+#include <raw_pdb/src/PDB_TPIStream.h>
+#include <raw_pdb/src/Examples/ExampleMemoryMappedFile.h>
 
+#endif // RTM_TOOLUTIL_TOOLUTIL_PCH_H
