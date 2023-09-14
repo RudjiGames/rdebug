@@ -55,10 +55,10 @@ for:
       - job_name: Windows
   
     init:
-      - git clone --depth 1 https://github.com/milostosic/rdebug rdebug
-      - git clone --depth 1 https://github.com/milostosic/build build
-      - git clone --depth 1 https://github.com/milostosic/rbase rbase
-      - git clone --depth 1 https://github.com/milostosic/DIA DIA
+      - git clone --depth 1 https://github.com/RudjiGames/rdebug rdebug
+      - git clone --depth 1 https://github.com/RudjiGames/build  build
+      - git clone --depth 1 https://github.com/RudjiGames/rbase  rbase
+      - git clone --depth 1 https://github.com/RudjiGames/DIA    DIA
      
     install:
       - build\tools\bin\windows\genie.exe --file=rdebug\genie\genie.lua vs2019
@@ -75,10 +75,10 @@ for:
       - job_name: Linux
 
     init:
-      - git clone --depth 1 https://github.com/milostosic/rdebug rdebug
-      - git clone --depth 1 https://github.com/milostosic/build build
-      - git clone --depth 1 https://github.com/milostosic/rbase rbase
-      - git clone --depth 1 https://github.com/bkaradzic/GENie GENie		# build GENie from source: `GLIBC_2.29' not found
+      - git clone --depth 1 https://github.com/RudjiGames/rdebug rdebug
+      - git clone --depth 1 https://github.com/RudjiGames/build  build
+      - git clone --depth 1 https://github.com/RudjiGames/rbase  rbase
+      - git clone --depth 1 https://github.com/bkaradzic/GENie   GENie		# build GENie from source: `GLIBC_2.29' not found
       - cd GENie && make && cd ..
 
     install:
@@ -98,9 +98,9 @@ for:
       - job_name: OSX
 
     init:
-      - git clone --depth 1 https://github.com/milostosic/rdebug rdebug
-      - git clone --depth 1 https://github.com/milostosic/build build
-      - git clone --depth 1 https://github.com/milostosic/rbase rbase
+      - git clone --depth 1 https://github.com/RudjiGames/rdebug rdebug
+      - git clone --depth 1 https://github.com/RudjiGames/build  build
+      - git clone --depth 1 https://github.com/RudjiGames/rbase  rbase
     
     install:
       - ./build/tools/bin/darwin/genie --file=rdebug/genie/genie.lua --gcc=osx gmake

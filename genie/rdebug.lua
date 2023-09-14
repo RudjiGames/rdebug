@@ -1,5 +1,5 @@
 --
--- Copyright (c) 2017 Milos Tosic. All rights reserved. 
+-- Copyright 2023 Milos Tosic. All rights reserved. 
 -- License: http://www.opensource.org/licenses/BSD-2-Clause
 --
 
@@ -8,15 +8,17 @@ function projectDependencies_rdebug()
 end
 
 function projectExtraConfigExecutable_rdebug()
-	configuration {"windows", "x32", "not gmake" }
-		includedirs { getProjectPath("DIA", ProjectPath.Root) }
-		libdirs { getProjectPath("DIA", ProjectPath.Root) .. "DIA/lib/x32/" }
-		links {"diaguids"}
-	configuration {"windows", "x64", "not gmake" }
-		includedirs { getProjectPath("DIA", ProjectPath.Root) }
-		libdirs { getProjectPath("DIA", ProjectPath.Root) .. "DIA/lib/x64/" }
-		links {"diaguids"}
-	configuration {}
+	if getTargetOS() == "windows" then
+		configuration {"windows", "x32", "not gmake" }
+			includedirs { getProjectPath("DIA", ProjectPath.Root) }
+			libdirs { getProjectPath("DIA", ProjectPath.Root) .. "DIA/lib/x32/" }
+			links {"diaguids"}
+		configuration {"windows", "x64", "not gmake" }
+			includedirs { getProjectPath("DIA", ProjectPath.Root) }
+			libdirs { getProjectPath("DIA", ProjectPath.Root) .. "DIA/lib/x64/" }
+			links {"diaguids"}
+		configuration {}
+	end
 end
 
 function projectExtraConfig_rdebug()

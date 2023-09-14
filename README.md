@@ -1,7 +1,7 @@
-<img src="https://rudji.com/images/lib/rdebug.png"/>
+<img src="https://www.rudji.com/images/lib/rdebug.png"/>
 
-[![Build status](https://ci.appveyor.com/api/projects/status/3cmmey9rd8qc512s?svg=true)](https://ci.appveyor.com/project/milostosic/rdebug)
-[![License](https://img.shields.io/badge/license-BSD--2%20clause-blue.svg)](https://github.com/milostosic/rdebug/blob/master/LICENSE)
+[![Build status](https://ci.appveyor.com/api/projects/status/dly9lqpteiy0v5k1?svg=true)](https://ci.appveyor.com/project/milostosic/rdebug-shw5x)
+[![License](https://img.shields.io/badge/license-BSD--2%20clause-blue.svg)](https://github.com/RudjiGames/rdebug/blob/master/LICENSE)
 
 **rdebug** is a debug symbol resolution library.
 
@@ -10,41 +10,30 @@ Source Code
 
 You can get the latest source code by cloning it from github:
 
-      git clone https://github.com/milostosic/rdebug.git 
+      git clone https://github.com/RudjiGames/rdebug.git 
 
 Dependencies
 ======
 
 Dependencies can be obtained by cloning the following repositories:
 
-	git clone https://github.com/milostosic/build.git
-	git clone https://github.com/milostosic/rbase.git
+	git clone https://github.com/RudjiGames/build.git
+	git clone https://github.com/RudjiGames/rbase.git
 
 DIA (Debug Interface Access) SDK - **Windows only**
 
 	git clone https://github.com/milostosic/DIA.git
 
-TODO
-======
-
-Symbol resolution on Linux.
-
-Author
-======
-
-The author of **rdebug** is Milos Tosic  
-[ <img src="https://github.com/milostosic/build/raw/gh-pages/images/twitter.png">](https://twitter.com/milostosic)[ <img src="https://github.com/milostosic/build/raw/gh-pages/images/mail.png">](mailto:milostosic77@gmail.com)  
-
 License (BSD 2-clause)
 ======
 
 <a href="http://opensource.org/licenses/BSD-2-Clause" target="_blank">
-<img align="right" src="http://opensource.org/trademarks/opensource/OSI-Approved-License-100x137.png">
+<img align="right" src="https://opensource.org/wp-content/uploads/2022/10/osi-badge-dark.svg" width="100" height="137">
 </a>
 
-	Copyright (c) 2017 Milos Tosic. All rights reserved.
+	Copyright 2023 Milos Tosic. All rights reserved.
 	
-	https://github.com/milostosic/rdebug
+	https://github.com/RudjiGames/rdebug
 	
 	Redistribution and use in source and binary forms, with or without
 	modification, are permitted provided that the following conditions are met:
