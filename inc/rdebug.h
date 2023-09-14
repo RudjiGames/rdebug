@@ -36,12 +36,21 @@ namespace rdebug {
 	{
 		uint64_t		m_baseAddress;
 		uint64_t		m_size;
+		uint64_t		m_loadTime;
+		uint64_t		m_unloadTime;
 		char			m_modulePath[1024];
 		Toolchain		m_toolchain;
 
 		inline bool checkAddress(uint64_t _address) const
 		{
 			return (_address - m_baseAddress <= m_size);
+		}
+
+		inline bool checkAddressAndTime(uint64_t _address, uint64_t _operationTime) const
+		{
+			return ((_operationTime >= m_loadTime)		&&
+					(_operationTime <= m_unloadTime)	&&
+					(_address - m_baseAddress <= m_size));
 		}
 	};
 
