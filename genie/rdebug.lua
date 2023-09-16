@@ -7,8 +7,18 @@ function projectDependencies_rdebug()
 	return { "rbase" }
 end
 
+DIAErrorPrinted = false
+
 function projectExtraConfigExecutable_rdebug()
 	if getTargetOS() == "windows" then
+		local DIApath = getProjectPath("DIA", ProjectPath.Root);
+		if DIApath == nil then
+			if DIAErrorPrinted == false then
+				print("DIA dependency is missing, please clone from https://github.com/RudjiGames/DIA!")
+			end
+			DIAErrorPrinted = true
+			return
+		end
 		configuration {"windows", "x32", "not gmake" }
 			includedirs { getProjectPath("DIA", ProjectPath.Root) }
 			libdirs { getProjectPath("DIA", ProjectPath.Root) .. "DIA/lib/x32/" }
