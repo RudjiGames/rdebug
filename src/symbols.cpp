@@ -140,7 +140,7 @@ void loadPDB(Module& _module)
 }
 #endif // RTM_PLATFORM_WINDOWS
 
-uintptr_t symbolResolverCreate(ModuleInfo* _moduleInfos, uint32_t _numInfos, const char* _executable, module_load_cb _callback, void* _data)
+uintptr_t symbolResolverCreate(ModuleInfo* _moduleInfos, uint32_t _numInfos, const char* _executable, module_load_cb /*_callback*/, void* /*_data*/)
 {
 	RTM_ASSERT(_moduleInfos, "Either module info array or toolchain desc can't be NULL");
 
@@ -635,6 +635,7 @@ uint64_t symbolResolverGetAddressID(uintptr_t _resolver, uint64_t _address)
 		else
 			return _address;
 	}
+	return 0; // dummy, warning fix
 }
 
 } // namespace rdebug
