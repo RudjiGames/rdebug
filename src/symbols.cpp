@@ -608,6 +608,8 @@ uint64_t symbolResolverGetAddressID(uintptr_t _resolver, uint64_t _address)
 #if RTM_PLATFORM_WINDOWS
 		uint64_t id = module->m_resolver->m_PDBFile->getSymbolID(_address - module->m_module.m_baseAddress);
 		return id + module->m_module.m_baseAddress;
+#else
+		return 0;
 #endif // RTM_PLATFORM_WINDOWS
 	}
 	else
@@ -635,7 +637,6 @@ uint64_t symbolResolverGetAddressID(uintptr_t _resolver, uint64_t _address)
 		else
 			return _address;
 	}
-	return 0; // dummy, warning fix
 }
 
 } // namespace rdebug
