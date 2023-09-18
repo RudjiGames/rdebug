@@ -142,7 +142,7 @@ void loadPDB(Module& _module)
 
 uintptr_t symbolResolverCreate(ModuleInfo* _moduleInfos, uint32_t _numInfos, const char* _executable, module_load_cb _callback, void* _data)
 {
-	RTM_UNUSED2(_callback, _data);
+	RTM_UNUSED_2(_callback, _data);
 	RTM_ASSERT(_moduleInfos, "Either module info array or toolchain desc can't be NULL");
 
 	Resolver* resolver = rtm_new<Resolver>();
