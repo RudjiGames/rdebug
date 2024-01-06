@@ -8,6 +8,9 @@
 #include <rdebug/src/symbols_types.h>
 #include <rbase/inc/console.h>
 
+#include "../3rd/rust-demangle.h"
+#include "../3rd/rust-demangle.c"
+
 #include <algorithm>
 
 #if RTM_PLATFORM_WINDOWS
@@ -515,6 +518,19 @@ inline const Module* addressGetModule(uintptr_t _resolver, uint64_t _address)
 	return 0;
 }
 
+struct StringData
+{
+	uint32_t m_length;
+	char	 m_data[32 * 1024 - 4];
+	StringData() : m_length(0) {}
+};
+
+void rustDemangleCallback(const char* data, size_t len, void* opaque)
+{
+	StringData* str = (StringData*)opaque;
+	memcpy(&str->m_data[str->m_length], data, len);
+}
+
 void symbolResolverGetFrame(uintptr_t _resolver, uint64_t _address, StackFrame* _frame)
 {
 	rtm::strlCpy(_frame->m_moduleName, RTM_NUM_ELEMENTS(_frame->m_moduleName), "Unknown");
@@ -535,6 +551,11 @@ void symbolResolverGetFrame(uintptr_t _resolver, uint64_t _address, StackFrame* 
 #if RTM_PLATFORM_WINDOWS
 		module->m_resolver->m_PDBFile->getSymbolByAddress(_address - module->m_module.m_baseAddress, *_frame);
 		rtm::strlCpy(_frame->m_moduleName, RTM_NUM_ELEMENTS(_frame->m_moduleName), rtm::pathGetFileName(module->m_module.m_modulePath));
+
+		StringData str;
+		if (rust_demangle_with_callback(_frame->m_func, 0, rustDemangleCallback, &str))
+			rtm::strlCpy(_frame->m_func, RTM_NUM_ELEMENTS(_frame->m_func), str.m_data);
+
 		return;
 #endif // RTM_PLATFORM_WINDOWS
 	}
@@ -583,6 +604,10 @@ void symbolResolverGetFrame(uintptr_t _resolver, uint64_t _address, StackFrame* 
 							++s;
 						}
 						rtm::strlCpy(_frame->m_func, RTM_NUM_ELEMENTS(_frame->m_func), procOut);
+
+						StringData str;
+						if (rust_demangle_with_callback(_frame->m_func, 0, rustDemangleCallback, &str))
+							rtm::strlCpy(_frame->m_func, RTM_NUM_ELEMENTS(_frame->m_func), str.m_data);
 
 						processReleaseOutput(procOut);
 					}
