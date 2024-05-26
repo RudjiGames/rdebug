@@ -19,13 +19,14 @@ function projectExtraConfigExecutable_rdebug()
 			DIAErrorPrinted = true
 			return
 		end
+
 		configuration {"windows", "x32", "not gmake" }
 			includedirs { getProjectPath("DIA", ProjectPath.Root) }
-			libdirs { getProjectPath("DIA", ProjectPath.Root) .. "DIA/lib/x32/" }
+			libdirs { getProjectPath("DIA", ProjectPath.Dir) .. "/lib/x32/" }
 			links {"diaguids"}
 		configuration {"windows", "x64", "not gmake" }
 			includedirs { getProjectPath("DIA", ProjectPath.Root) }
-			libdirs { getProjectPath("DIA", ProjectPath.Root) .. "DIA/lib/x64/" }
+			libdirs { getProjectPath("DIA", ProjectPath.Dir) .. "/lib/x64/" }
 			links {"diaguids"}
 		configuration {}
 	end
