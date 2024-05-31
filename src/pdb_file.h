@@ -21,7 +21,7 @@
 class PDBFile
 {
 	private:
-		rtm_string			m_sFileName;
+		std::string			m_sFileName;
 		IDiaDataSource*		m_pIDiaDataSource;
 		IDiaSession*		m_pIDiaSession;
 		IDiaSymbol*			m_pIDiaSymbol;

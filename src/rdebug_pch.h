@@ -17,5 +17,7 @@
 
 #include <rdebug/inc/rdebug.h>
 
+#include <string>
+
 #endif // RTM_TOOLUTIL_TOOLUTIL_PCH_H
 

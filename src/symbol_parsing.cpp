@@ -100,7 +100,7 @@ void parsePlayStationSymbolInfo(const char* _str, StackFrame& _frame)
 	}
 }
 
-void parseFile(rtm_string& _dst, uint32_t& _line, const char*& _buffer)
+void parseFile(std::string& _dst, uint32_t& _line, const char*& _buffer)
 {
 	while (charIsBlank(*_buffer) && !charIsEOL(*_buffer)) ++_buffer;
 	while (!charIsEOL(*_buffer))
@@ -119,7 +119,7 @@ void parseFile(rtm_string& _dst, uint32_t& _line, const char*& _buffer)
 	}
 }
 
-void parseSym(rtm_string& _dst, const char*& _buffer)
+void parseSym(std::string& _dst, const char*& _buffer)
 {
 	while (charIsBlank(*_buffer) && !charIsEOL(*_buffer)) ++_buffer;
 	while (!charIsTab(*_buffer) && !charIsEOL(*_buffer))

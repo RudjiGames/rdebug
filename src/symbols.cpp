@@ -195,11 +195,11 @@ uintptr_t symbolResolverCreate(ModuleInfo* _moduleInfos, uint32_t _numInfos, con
 			module.m_resolver->m_executableName = module.m_resolver->m_executablePath ? rtm::pathGetFileName(module.m_resolver->m_executablePath) : 0;
 		}
 
-		rtm_string append_nm;
-		rtm_string append_a2l;
-		rtm_string append_cppf;
+		std::string append_nm;
+		std::string append_a2l;
+		std::string append_cppf;
 
-		rtm_string quote;
+		std::string quote;
 
 		if ((module.m_module.m_toolchain.m_type == rdebug::Toolchain::GCC) ||
 			(module.m_module.m_toolchain.m_type == rdebug::Toolchain::PS4))
