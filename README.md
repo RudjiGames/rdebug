@@ -1,4 +1,4 @@
-<img src="https://rudji.com/images/lib/rdebug.png"/>
+<img height="81" src="https://rudji.com/rudji_games_logo_bright.svg"/>
 
 [![Build status](https://ci.appveyor.com/api/projects/status/dly9lqpteiy0v5k1?svg=true)](https://ci.appveyor.com/project/milostosic/rdebug-shw5x)
 [![License](https://img.shields.io/badge/license-BSD--2%20clause-blue.svg)](https://github.com/RudjiGames/rdebug/blob/master/LICENSE)
