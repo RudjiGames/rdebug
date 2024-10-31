@@ -2,15 +2,15 @@
 environment:
   matrix:
     - job_name: Windows
-      APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2019
+      APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2022
       configuration: Debug
 
     - job_name: Windows
-      APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2019
+      APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2022
       configuration: Release
 
     - job_name: Windows
-      APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2019
+      APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2022
       configuration: Retail
 
     - job_name: Linux
@@ -61,9 +61,9 @@ for:
       - git clone --depth 1 https://github.com/RudjiGames/DIA    DIA
      
     install:
-      - build\tools\bin\windows\genie.exe --file=rdebug\genie\genie.lua vs2019
+      - build\tools\bin\windows\genie.exe --file=rdebug\genie\genie.lua vs2022
       
-    build: ../.build/windows/vs2019/rdebug/projects/rdebug.sln
+    build: ../.build/windows/vs2022/rdebug/projects/rdebug.sln
 
 # ======================================
 # Linux
@@ -85,7 +85,7 @@ for:
       - ./GENie/bin/linux/genie --file=rdebug/genie/genie.lua --gcc=linux-gcc gmake
   
     build_script:
-      - cd ./.build/linux/gcc/rdebug/projects/
+      - cd ./.build/linux/linux-gcc/rdebug/projects/
       - make config=${buildcfg}
 
 # ======================================
@@ -101,9 +101,11 @@ for:
       - git clone --depth 1 https://github.com/RudjiGames/rdebug rdebug
       - git clone --depth 1 https://github.com/RudjiGames/build  build
       - git clone --depth 1 https://github.com/RudjiGames/rbase  rbase
+      - git clone --depth 1 https://github.com/bkaradzic/GENie GENie  # build GENie from source: we don't know the target CPU, can't use ARM binary from 'build'
+      - cd GENie && make && cd ..
     
     install:
-      - ./build/tools/bin/darwin/genie --file=rdebug/genie/genie.lua --gcc=osx gmake
+      - ./GENie/bin/darwin/genie --file=rdebug/genie/genie.lua --gcc=osx-x64 gmake
     
     build_script:
       - cd ./.build/osx/clang/rdebug/projects/
