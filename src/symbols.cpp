@@ -244,7 +244,7 @@ uintptr_t symbolResolverCreate(ModuleInfo* _moduleInfos, uint32_t _numInfos, con
 		case rdebug::Toolchain::MSVC:
 			module.m_resolver->m_parseSym		= 0;
 			module.m_resolver->m_parseSymMap	= 0;
-			module.m_resolver->m_symbolStore	= module.m_resolver->scratch(module.m_module.m_toolchain.m_toolchainPath);
+			module.m_resolver->m_symbolStore	= 0;
 			module.m_resolver->m_tc_addr2line	= 0;
 			module.m_resolver->m_tc_nm			= 0;
 			module.m_resolver->m_tc_cppfilt		= 0;
@@ -272,6 +272,8 @@ uintptr_t symbolResolverCreate(ModuleInfo* _moduleInfos, uint32_t _numInfos, con
 		case rdebug::Toolchain::Unknown:
 			rtm::Console::info("Toolchain is not configured, no symbols can be resolved!\n");
 		};
+
+		module.m_resolver->m_symbolStore = module.m_resolver->scratch(module.m_module.m_toolchain.m_toolchainPath);
 
 #if RTM_PLATFORM_WINDOWS
 		if (loadPDB(module) && _callback)
