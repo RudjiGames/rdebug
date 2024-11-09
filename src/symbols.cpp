@@ -126,7 +126,7 @@ void parseSymbolMapGNU(const char*  _buffer, SymbolMap& _symMap);
 void parseSymbolMapPS3(const char*  _buffer, SymbolMap& _symMap);
 
 #if RTM_PLATFORM_WINDOWS
-void loadPDB(Module& _module)
+bool loadPDB(Module& _module)
 {
 	if (!_module.m_resolver->m_PDBFile)
 	{
@@ -136,7 +136,10 @@ void loadPDB(Module& _module)
 		findSymbol(_module.m_module.m_modulePath, symbolPath, _module.m_resolver->m_symbolStore);
 		if (rtm::strCmp(symbolPath, "") != 0)
 			_module.m_resolver->m_PDBFile->load(symbolPath);
+		else
+			return false;
 	}
+	return _module.m_resolver->m_PDBFile->isLoaded();
 }
 #endif // RTM_PLATFORM_WINDOWS
 
@@ -271,13 +274,8 @@ uintptr_t symbolResolverCreate(ModuleInfo* _moduleInfos, uint32_t _numInfos, con
 		};
 
 #if RTM_PLATFORM_WINDOWS
-//		if (module.m_module.m_toolchain.m_type == rdebug::Toolchain::MSVC)
-		{
-			loadPDB(module);
-			if (_callback)
-				_callback(module.m_moduleName, _data);
-
-		}
+		if (loadPDB(module) && _callback)
+			_callback(module.m_moduleName, _data);
 #endif
 
 		resolver->m_modules.push_back(module);
@@ -544,7 +542,7 @@ void symbolResolverGetFrame(uintptr_t _resolver, uint64_t _address, StackFrame* 
 		return;
 
 #if RTM_PLATFORM_WINDOWS
-	if (module->m_resolver->m_PDBFile)
+	if (module->m_resolver->m_PDBFile && module->m_resolver->m_PDBFile->isLoaded())
 	{
 		bool found = module->m_resolver->m_PDBFile->getSymbolByAddress(_address - module->m_module.m_baseAddress, *_frame);
 		rtm::strlCpy(_frame->m_moduleName, RTM_NUM_ELEMENTS(_frame->m_moduleName), rtm::pathGetFileName(module->m_module.m_modulePath));

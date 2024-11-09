@@ -141,7 +141,7 @@ HRESULT createDiaDataSource(void** _ptr)
 
 bool findSymbol(const char* _path, char _outSymbolPath[2048], const char* _symbolStore)
 {
-	IDiaDataSource* pIDiaDataSource = NULL;
+	IDiaDataSource* pIDiaDataSource = nullptr;
 
 	HRESULT hr = createDiaDataSource((void**)&pIDiaDataSource);
 	
@@ -162,7 +162,7 @@ bool findSymbol(const char* _path, char _outSymbolPath[2048], const char* _symbo
 	if (!srcPath || (rtm::strLen(srcPath) == 0))
 	{
 		wchar_t moduleName[512];
-		GetModuleFileNameW(NULL, moduleName, sizeof(wchar_t)*512);
+		GetModuleFileNameW(nullptr, moduleName, sizeof(wchar_t)*512);
 		rtm::strlCpy(moduleNameM, RTM_NUM_ELEMENTS(moduleName), rtm::WideToMulti(moduleName));
 		srcPath = moduleNameM;
 	}
@@ -224,9 +224,9 @@ bool findSymbol(const char* _path, char _outSymbolPath[2048], const char* _symbo
 const char*	s_PDB_File_Extension = "pdb";
 
 PDBFile::PDBFile() :
-	m_pIDiaDataSource( NULL ),
-	m_pIDiaSession( NULL ), 
-	m_pIDiaSymbol( NULL )	
+	m_pIDiaDataSource(nullptr),
+	m_pIDiaSession(nullptr),
+	m_pIDiaSymbol(nullptr)
 {
 	m_isStripped = false;
 }
@@ -241,17 +241,17 @@ void PDBFile::close()
 	if ( m_pIDiaSymbol ) 
 	{
 		m_pIDiaSymbol->Release();
-		m_pIDiaSymbol = NULL;
+		m_pIDiaSymbol = nullptr;
 	}
 	if ( m_pIDiaSession ) 
 	{
 		m_pIDiaSession->Release();
-		m_pIDiaSession = NULL;
+		m_pIDiaSession = nullptr;
 	}
 	if (m_pIDiaDataSource)
 	{
 		m_pIDiaDataSource->Release();
-		m_pIDiaDataSource = NULL;
+		m_pIDiaDataSource = nullptr;
 	}
 }
 
@@ -260,7 +260,7 @@ bool PDBFile::load(const char* _filename)
 	if (!_filename) return false;
 	if (rtm::strLen(_filename) == 0) return false;
 
-	if (m_pIDiaDataSource == NULL)
+	if (m_pIDiaDataSource == nullptr)
 	{
 		HRESULT hr = rdebug::createDiaDataSource((void**)&m_pIDiaDataSource);
 
@@ -295,6 +295,11 @@ bool PDBFile::load(const char* _filename)
 	return bRet;
 }
 
+bool PDBFile::isLoaded() const
+{
+	return m_pIDiaDataSource != nullptr;
+}
+
 bool PDBFile::getSymbolByAddress(uint64_t _address, rdebug::StackFrame& _frame)
 {
 	rtm::strlCpy(_frame.m_file, RTM_NUM_ELEMENTS(_frame.m_file), "Unknown");
@@ -303,7 +308,7 @@ bool PDBFile::getSymbolByAddress(uint64_t _address, rdebug::StackFrame& _frame)
 
 	if( m_pIDiaSession )
 	{
-		IDiaSymbol* sym = NULL;
+		IDiaSymbol* sym = nullptr;
 
 		_address -= 1;	// get address of previous instruction
 
@@ -312,8 +317,8 @@ bool PDBFile::getSymbolByAddress(uint64_t _address, rdebug::StackFrame& _frame)
 
 		if (sym)
 		{
-			BSTR SymName = NULL;
-			BSTR FileName = NULL;
+			BSTR SymName = nullptr;
+			BSTR FileName = nullptr;
 			DWORD LineNo = 0;
 
 			if (FAILED(sym->get_undecoratedNameEx(UND_CODE, &SymName)))
@@ -322,24 +327,24 @@ bool PDBFile::getSymbolByAddress(uint64_t _address, rdebug::StackFrame& _frame)
 				return false;
 			}
 
-			if (SymName == NULL)
+			if (SymName == nullptr)
 				sym->get_name(&SymName);
 	
-			IDiaEnumLineNumbers* lineEnum = NULL;
+			IDiaEnumLineNumbers* lineEnum = nullptr;
 			if (FAILED(m_pIDiaSession->findLinesByVA(_address,1,&lineEnum)))
 				return false;
 
 			ULONG celt = 0;
 			for (;;)
 			{
-				IDiaLineNumber* Line = NULL;
+				IDiaLineNumber* Line = nullptr;
 				lineEnum->Next(1, &Line, &celt);
 				if (!Line)
 					celt = 1;			// hack, no file and line but has symbol name
 
 				if (celt==1)
 				{
-					IDiaSourceFile* SrcFile = NULL;
+					IDiaSourceFile* SrcFile = nullptr;
 					
 					if (Line)
 					{
@@ -398,7 +403,7 @@ uint64_t PDBFile::getSymbolID(uint64_t _address)
 	DWORD ID = 0;
 	if (m_pIDiaSession)
 	{
-		IDiaSymbol* sym = NULL;
+		IDiaSymbol* sym = nullptr;
 
 		_address -= 1;	// get address of previous instruction
 
