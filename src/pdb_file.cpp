@@ -185,6 +185,14 @@ bool findSymbol(const char* _path, char _outSymbolPath[2048], const char* _symbo
 
 	if (FAILED(hr))
 	{
+		char tryLocalPDB[512];
+		rtm::strlCpy(tryLocalPDB, 512, srcPath);
+		rtm::strlCpy(const_cast<char*>(rtm::pathGetExt(tryLocalPDB)), 5, ".pdb");
+		hr = pIDiaDataSource->loadDataFromPdb((LPOLESTR)rtm::MultiToWide(tryLocalPDB));
+	}
+
+	if (FAILED(hr))
+	{
 		pIDiaDataSource->Release();
 
 		// Hacky desperate attempt to find PDB file where EXE resides
