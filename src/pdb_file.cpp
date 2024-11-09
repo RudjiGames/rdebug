@@ -287,7 +287,7 @@ bool PDBFile::load(const char* _filename)
 	return bRet;
 }
 
-void PDBFile::getSymbolByAddress(uint64_t _address, rdebug::StackFrame& _frame)
+bool PDBFile::getSymbolByAddress(uint64_t _address, rdebug::StackFrame& _frame)
 {
 	rtm::strlCpy(_frame.m_file, RTM_NUM_ELEMENTS(_frame.m_file), "Unknown");
 	rdebug::addressToString(_address, _frame.m_func);
@@ -311,7 +311,7 @@ void PDBFile::getSymbolByAddress(uint64_t _address, rdebug::StackFrame& _frame)
 			if (FAILED(sym->get_undecoratedNameEx(UND_CODE, &SymName)))
 			{
 				sym->Release();
-				return;
+				return false;
 			}
 
 			if (SymName == NULL)
@@ -319,7 +319,7 @@ void PDBFile::getSymbolByAddress(uint64_t _address, rdebug::StackFrame& _frame)
 	
 			IDiaEnumLineNumbers* lineEnum = NULL;
 			if (FAILED(m_pIDiaSession->findLinesByVA(_address,1,&lineEnum)))
-				return;
+				return false;
 
 			ULONG celt = 0;
 			for (;;)
@@ -370,7 +370,7 @@ void PDBFile::getSymbolByAddress(uint64_t _address, rdebug::StackFrame& _frame)
 
 					lineEnum->Release();
 					sym->Release();
-					return;
+					return true;
 				}
 
 				if (celt != 1)
@@ -382,6 +382,7 @@ void PDBFile::getSymbolByAddress(uint64_t _address, rdebug::StackFrame& _frame)
 			sym->Release();
 		}
 	}
+	return false;
 }
 
 uint64_t PDBFile::getSymbolID(uint64_t _address)

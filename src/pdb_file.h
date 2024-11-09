@@ -32,7 +32,7 @@ class PDBFile
 		~PDBFile();
 
 		bool		load(const char* _filename);
-		void		getSymbolByAddress(uint64_t _address, rdebug::StackFrame& _frame);
+		bool		getSymbolByAddress(uint64_t _address, rdebug::StackFrame& _frame);
 		uint64_t	getSymbolID(uint64_t _address);
 		void		close();
 

@@ -25,8 +25,7 @@ inline static uint16_t read16(FILE* _file, uint16_t _pos)
 	fseek(_file, _pos, SEEK_SET);
 	uint8_t buf[2];
 	fread(buf, 1, 2, _file);
-	return	(uint32_t)buf[0] |
-		(uint32_t)buf[1] << 8;
+	return (uint32_t)buf[0] | (uint32_t)buf[1] << 8;
 }
 
 inline static uint32_t read32(FILE* _file, uint16_t _pos)
@@ -34,15 +33,12 @@ inline static uint32_t read32(FILE* _file, uint16_t _pos)
 	fseek(_file, _pos, SEEK_SET);
 	uint8_t buf[4];
 	fread(buf, 1, 4, _file);
-	return	(uint32_t)buf[0] |
-		(uint32_t)buf[1] << 8 |
-		(uint32_t)buf[2] << 16 |
-		(uint32_t)buf[3] << 24;
+	return (uint32_t)buf[0] | (uint32_t)buf[1] << 8 | (uint32_t)buf[2] << 16 | (uint32_t)buf[3] << 24;
 }
 
 #define RH_RET(_x) { fclose(file); return _x; }
 
-int hasRichheader(char const* _filePath)
+int hasRichHeader(char const* _filePath)
 {
 	FILE* file = fopen(_filePath, "rb");
 	if (!file)
@@ -138,7 +134,8 @@ void loadPDB(Module& _module)
 		char symbolPath[1024];
 		rtm::strlCpy(symbolPath, RTM_NUM_ELEMENTS(symbolPath), "");
 		findSymbol(_module.m_module.m_modulePath, symbolPath, _module.m_resolver->m_symbolStore);
-		_module.m_resolver->m_PDBFile->load(symbolPath);
+		if (rtm::strCmp(symbolPath, "") != 0)
+			_module.m_resolver->m_PDBFile->load(symbolPath);
 	}
 }
 #endif // RTM_PLATFORM_WINDOWS
@@ -173,7 +170,7 @@ uintptr_t symbolResolverCreate(ModuleInfo* _moduleInfos, uint32_t _numInfos, con
 		if ((rtm::striCmp(ext, "EXE") == 0) || (rtm::striCmp(ext, "DLL") == 0))
 		{
 #if RTM_PLATFORM_WINDOWS
-			int hasRH = hasRichheader(module.m_module.m_modulePath);
+			int hasRH = hasRichHeader(module.m_module.m_modulePath);
 			if (hasRH >= 0)
 				module.m_module.m_toolchain.m_type = (hasRH == 1) ? rdebug::Toolchain::MSVC : rdebug::Toolchain::GCC;
 #endif // RTM_PLATFORM_WINDOWS
@@ -274,7 +271,7 @@ uintptr_t symbolResolverCreate(ModuleInfo* _moduleInfos, uint32_t _numInfos, con
 		};
 
 #if RTM_PLATFORM_WINDOWS
-		if (module.m_module.m_toolchain.m_type == rdebug::Toolchain::MSVC)
+//		if (module.m_module.m_toolchain.m_type == rdebug::Toolchain::MSVC)
 		{
 			loadPDB(module);
 			if (_callback)
@@ -546,75 +543,75 @@ void symbolResolverGetFrame(uintptr_t _resolver, uint64_t _address, StackFrame* 
 	if (!module)
 		return;
 
-	if (module->m_module.m_toolchain.m_type == rdebug::Toolchain::MSVC)
-	{
 #if RTM_PLATFORM_WINDOWS
-		module->m_resolver->m_PDBFile->getSymbolByAddress(_address - module->m_module.m_baseAddress, *_frame);
+	if (module->m_resolver->m_PDBFile)
+	{
+		bool found = module->m_resolver->m_PDBFile->getSymbolByAddress(_address - module->m_module.m_baseAddress, *_frame);
 		rtm::strlCpy(_frame->m_moduleName, RTM_NUM_ELEMENTS(_frame->m_moduleName), rtm::pathGetFileName(module->m_module.m_modulePath));
 
 		StringData str;
 		if (rust_demangle_with_callback(_frame->m_func, 0, rustDemangleCallback, &str))
 			rtm::strlCpy(_frame->m_func, RTM_NUM_ELEMENTS(_frame->m_func), str.m_data);
 
-		return;
-#endif // RTM_PLATFORM_WINDOWS
+		if (found)
+			return;
 	}
-	else
+#endif // RTM_PLATFORM_WINDOWS
+
+	if (module->m_resolver->m_tc_addr2line && (module->m_resolver->m_tc_addr2line[0] != '\0'))
 	{
-		if (module->m_resolver->m_tc_addr2line && (module->m_resolver->m_tc_addr2line[0] != '\0'))
+		rtm::strlCpy(_frame->m_moduleName, RTM_NUM_ELEMENTS(_frame->m_moduleName), module->m_resolver->m_executableName);
+
+		constexpr int MAX_CMDLINE_SIZE = 16384 + 8192;
+		char cmdline[MAX_CMDLINE_SIZE];
+	#if RTM_PLATFORM_WINDOWS && RTM_COMPILER_MSVC
+		sprintf_s(cmdline, MAX_CMDLINE_SIZE, module->m_resolver->m_tc_addr2line, _address - module->m_resolver->m_baseAddress4addr2Line);
+	#else
+		snprintf(cmdline, MAX_CMDLINE_SIZE, module->m_resolver->m_tc_addr2line, _address - module->m_resolver->m_baseAddress4addr2Line);
+	#endif
+		char* procOut = processGetOutputOf(cmdline, true);
+		if (procOut && !rtm::strStr(procOut, "No such file"))
 		{
-			rtm::strlCpy(_frame->m_moduleName, RTM_NUM_ELEMENTS(_frame->m_moduleName), module->m_resolver->m_executableName);
-
-			constexpr int MAX_CMDLINE_SIZE = 16384 + 8192;
-			char cmdline[MAX_CMDLINE_SIZE];
-#if RTM_PLATFORM_WINDOWS && RTM_COMPILER_MSVC
-			sprintf_s(cmdline, MAX_CMDLINE_SIZE, module->m_resolver->m_tc_addr2line, _address - module->m_resolver->m_baseAddress4addr2Line);
-#else
-			snprintf(cmdline, MAX_CMDLINE_SIZE, module->m_resolver->m_tc_addr2line, _address - module->m_resolver->m_baseAddress4addr2Line);
-#endif
-			char* procOut = processGetOutputOf(cmdline, true);
-			if (procOut && !rtm::strStr(procOut, "No such file"))
-			{
-				module->m_resolver->m_parseSym(&procOut[0], *_frame);
-				rtm::pathCanonicalize(_frame->m_file);
-				processReleaseOutput(procOut);
-			}
-
-			if (rtm::strCmp(_frame->m_func, "Unknown") != 0)
-				if (rtm::strLen(module->m_resolver->m_tc_cppfilt) != 0)
-				{
-#if RTM_PLATFORM_WINDOWS && RTM_COMPILER_MSVC
-					sprintf_s(cmdline, MAX_CMDLINE_SIZE, "%s%s", module->m_resolver->m_tc_cppfilt, _frame->m_func);
-#else
-					snprintf(cmdline, MAX_CMDLINE_SIZE, "%s%s", module->m_resolver->m_tc_cppfilt, _frame->m_func);
-#endif
-					procOut = processGetOutputOf(cmdline, true);
-					if (procOut)
-					{
-						size_t len = rtm::strLen(procOut);
-						size_t s = 0;
-						while (s < len)
-						{
-							if ((procOut[s] == '\r') ||
-								(procOut[s] == '\n'))
-							{
-								procOut[s] = 0;
-								break;
-							}
-							++s;
-						}
-						rtm::strlCpy(_frame->m_func, RTM_NUM_ELEMENTS(_frame->m_func), procOut);
-
-						StringData str;
-						if (rust_demangle_with_callback(_frame->m_func, 0, rustDemangleCallback, &str))
-							rtm::strlCpy(_frame->m_func, RTM_NUM_ELEMENTS(_frame->m_func), str.m_data);
-
-						processReleaseOutput(procOut);
-					}
-				}
+			module->m_resolver->m_parseSym(&procOut[0], *_frame);
+			rtm::pathCanonicalize(_frame->m_file);
+			processReleaseOutput(procOut);
 		}
+
+		if (rtm::strCmp(_frame->m_func, "Unknown") != 0)
+			if (rtm::strLen(module->m_resolver->m_tc_cppfilt) != 0)
+			{
+#if RTM_PLATFORM_WINDOWS && RTM_COMPILER_MSVC
+				sprintf_s(cmdline, MAX_CMDLINE_SIZE, "%s%s", module->m_resolver->m_tc_cppfilt, _frame->m_func);
+#else
+				snprintf(cmdline, MAX_CMDLINE_SIZE, "%s%s", module->m_resolver->m_tc_cppfilt, _frame->m_func);
+#endif
+				procOut = processGetOutputOf(cmdline, true);
+				if (procOut)
+				{
+					size_t len = rtm::strLen(procOut);
+					size_t s = 0;
+					while (s < len)
+					{
+						if ((procOut[s] == '\r') ||
+							(procOut[s] == '\n'))
+						{
+							procOut[s] = 0;
+							break;
+						}
+						++s;
+					}
+					rtm::strlCpy(_frame->m_func, RTM_NUM_ELEMENTS(_frame->m_func), procOut);
+
+					StringData str;
+					if (rust_demangle_with_callback(_frame->m_func, 0, rustDemangleCallback, &str))
+						rtm::strlCpy(_frame->m_func, RTM_NUM_ELEMENTS(_frame->m_func), str.m_data);
+
+					processReleaseOutput(procOut);
+				}
+			}
 	}
 }
+
 
 uint64_t symbolResolverGetAddressID(uintptr_t _resolver, uint64_t _address)
 {
@@ -629,40 +626,36 @@ uint64_t symbolResolverGetAddressID(uintptr_t _resolver, uint64_t _address)
 	if (module->m_isRTMdll)
 		return 0;
 
-	if (module->m_module.m_toolchain.m_type == rdebug::Toolchain::MSVC)
-	{
 #if RTM_PLATFORM_WINDOWS
+	if (module->m_resolver->m_PDBFile)
+	{
 		uint64_t id = module->m_resolver->m_PDBFile->getSymbolID(_address - module->m_module.m_baseAddress);
 		return id + module->m_module.m_baseAddress;
-#else
-		return 0;
+	}
 #endif // RTM_PLATFORM_WINDOWS
-	}
-	else
+
+	if (module->m_resolver->m_tc_nm && (rtm::strLen(module->m_resolver->m_tc_nm) != 0) && (!module->m_resolver->m_symbolMapInitialized))
 	{
-		if (module->m_resolver->m_tc_nm && (rtm::strLen(module->m_resolver->m_tc_nm) != 0) && (!module->m_resolver->m_symbolMapInitialized))
+		char cmdline[4096 * 2];
+		rtm::strlCpy(cmdline, RTM_NUM_ELEMENTS(cmdline), module->m_resolver->m_tc_nm);
+
+		const char* procOut = processGetOutputOf(cmdline, true);
+
+		if (procOut)
 		{
-			char cmdline[4096 * 2];
-			rtm::strlCpy(cmdline, RTM_NUM_ELEMENTS(cmdline), module->m_resolver->m_tc_nm);
+			if (!rtm::strStr(procOut, "No such file"))
+				module->m_resolver->m_parseSymMap(procOut, module->m_resolver->m_symbolMap);
+			module->m_resolver->m_symbolMapInitialized = true;
 
-			const char* procOut = processGetOutputOf(cmdline, true);
-
-			if (procOut)
-			{
-				if (!rtm::strStr(procOut, "No such file"))
-					module->m_resolver->m_parseSymMap(procOut, module->m_resolver->m_symbolMap);
-				module->m_resolver->m_symbolMapInitialized = true;
-
-				processReleaseOutput(procOut);
-			}
+			processReleaseOutput(procOut);
 		}
-
-		rdebug::Symbol* sym = module->m_resolver->m_symbolMap.findSymbol(_address);
-		if (sym)
-			return (uint64_t)sym->m_nameHash;
-		else
-			return _address;
 	}
+
+	rdebug::Symbol* sym = module->m_resolver->m_symbolMap.findSymbol(_address);
+	if (sym)
+		return (uint64_t)sym->m_nameHash;
+	else
+		return _address;
 }
 
 } // namespace rdebug
