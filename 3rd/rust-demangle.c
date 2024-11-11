@@ -566,7 +566,7 @@ static void demangle_path(struct rust_demangler *rdm, bool in_value) {
         PRINT(">");
         break;
     case 'B': {
-        size_t backref = parse_integer_62(rdm);
+        size_t backref = (size_t)parse_integer_62(rdm);
         if (!rdm->skipping_printing) {
             size_t old_next = rdm->next;
             rdm->next = backref;
@@ -778,7 +778,7 @@ static void demangle_type(struct rust_demangler *rdm) {
 		}
         break;
     case 'B': {
-		{size_t backref = parse_integer_62(rdm);
+		{size_t backref = (size_t)parse_integer_62(rdm);
 		if (!rdm->skipping_printing) {
 			size_t old_next = rdm->next;
 			rdm->next = backref;
@@ -805,7 +805,7 @@ static bool demangle_path_maybe_open_generics(struct rust_demangler *rdm) {
     CHECK_OR(!rdm->errored, return open);
 
     if (eat(rdm, 'B')) {
-        size_t backref = parse_integer_62(rdm);
+        size_t backref = (size_t)parse_integer_62(rdm);
         if (!rdm->skipping_printing) {
             size_t old_next = rdm->next;
             rdm->next = backref;
@@ -1055,7 +1055,7 @@ static void demangle_const(struct rust_demangler *rdm, bool in_value) {
         break;
 
     case 'B': {
-        size_t backref = parse_integer_62(rdm);
+        size_t backref = (size_t)parse_integer_62(rdm);
         if (!rdm->skipping_printing) {
             size_t old_next = rdm->next;
             rdm->next = backref;
