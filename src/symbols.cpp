@@ -114,7 +114,7 @@ FARPROC loadFunc(HMODULE _kernel, HMODULE _psapi, const char* _name)
 class PDBFile;
 
 namespace rdebug {
-	bool findSymbol(const char* _path, char _outSymbolPath[2048], const char* _symbolStore);
+	bool findSymbol(const char* _path, wchar_t _outSymbolPath[4096], const char* _symbolStore);
 }
 
 namespace rdebug {
@@ -131,10 +131,10 @@ bool loadPDB(Module& _module)
 	if (!_module.m_resolver->m_PDBFile)
 	{
 		_module.m_resolver->m_PDBFile = rtm_new<PDBFile>();
-		char symbolPath[1024];
-		rtm::strlCpy(symbolPath, RTM_NUM_ELEMENTS(symbolPath), "");
+		wchar_t symbolPath[1024];
+		wcscpy(symbolPath, L"");
 		findSymbol(_module.m_module.m_modulePath, symbolPath, _module.m_resolver->m_symbolStore);
-		if (rtm::strCmp(symbolPath, "") != 0)
+		if (wcscmp(symbolPath, L"") != 0)
 			_module.m_resolver->m_PDBFile->load(symbolPath);
 		else
 			return false;

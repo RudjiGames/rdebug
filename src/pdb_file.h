@@ -31,14 +31,14 @@ class PDBFile
 		PDBFile();
 		~PDBFile();
 
-		bool		load(const char* _filename);
+		bool		load(const wchar_t* _filename);
 		bool		isLoaded() const;
 		bool		getSymbolByAddress(uint64_t _address, rdebug::StackFrame& _frame);
 		uint64_t	getSymbolID(uint64_t _address);
 		void		close();
 
 	private:
-		bool		loadSymbolsFileWithoutValidation(const char* _PdbFileName);
+		bool		loadSymbolsFileWithoutValidation(const wchar_t* _PdbFileName);
 };
 
 #endif // RTM_PLATFORM_WINDOWS

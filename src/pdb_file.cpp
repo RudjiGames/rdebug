@@ -70,7 +70,7 @@ class DiaLoadCallBack : public IDiaLoadCallback2
 		wchar_t*	m_buffer;
 
 	public:
-		DiaLoadCallBack(wchar_t inBuffer[1024]) : m_refCount(0), m_buffer(inBuffer) {}
+		DiaLoadCallBack(wchar_t* inBuffer) : m_refCount(0), m_buffer(inBuffer) {}
 		virtual ~DiaLoadCallBack() {}
 
     //	IUnknown
@@ -139,7 +139,7 @@ HRESULT createDiaDataSource(void** _ptr)
 	return hr;
 }
 
-bool findSymbol(const char* _path, char _outSymbolPath[2048], const char* _symbolStore)
+bool findSymbol(const char* _path, wchar_t _outSymbolPath[4096], const char* _symbolStore)
 {
 	IDiaDataSource* pIDiaDataSource = nullptr;
 
@@ -152,19 +152,21 @@ bool findSymbol(const char* _path, char _outSymbolPath[2048], const char* _symbo
 	// Do not change the the slashes only if you detect each part in the _symbolStore.
 	rtm::MultiToWide symbolStore(_symbolStore, false);
 
-	wchar_t symStoreBuffer[4096];
+	wchar_t symStoreBuffer[32 * 1024];
 	wcscpy(symStoreBuffer, L"");
 
 	// The file path is not needed in the search path, loadDataForExe will find from src path automatically.
 	// The semicolon is necessary between each path (or srv*).
-	char moduleNameM[512];
-	const char* srcPath = _path;
-	if (!srcPath || (rtm::strLen(srcPath) == 0))
+	wchar_t moduleName[8 * 1024];
+
+	if (!_path || (rtm::strLen(_path) == 0))
 	{
-		wchar_t moduleName[512];
-		GetModuleFileNameW(nullptr, moduleName, sizeof(wchar_t)*512);
-		rtm::strlCpy(moduleNameM, RTM_NUM_ELEMENTS(moduleName), rtm::WideToMulti(moduleName));
-		srcPath = moduleNameM;
+		GetModuleFileNameW(nullptr, moduleName, sizeof(moduleName));
+	}
+	else
+	{
+		rtm::MultiToWide widePath(_path);
+		wcscpy(moduleName, widePath);
 	}
 
 	if (symbolStore.size() > 1) // not ("" or null)
@@ -177,44 +179,34 @@ bool findSymbol(const char* _path, char _outSymbolPath[2048], const char* _symbo
 		GetEnvironmentVariableW(L"_NT_SYMBOL_PATH", (LPWSTR)&symStoreBuffer[len], sizeof(symStoreBuffer));
 	}
 
-	wchar_t outSymbolPath[2048];
+	wchar_t outSymbolPath[32 * 1024];
 	DiaLoadCallBack callback(outSymbolPath);
 	callback.AddRef();
 
-	hr = pIDiaDataSource->loadDataForExe((LPOLESTR)rtm::MultiToWide(srcPath), (LPOLESTR)symStoreBuffer, &callback);
+	hr = pIDiaDataSource->loadDataForExe(moduleName, (LPOLESTR)symStoreBuffer, &callback);
 
 	if (FAILED(hr))
 	{
-		char tryLocalPDB[512];
-		rtm::strlCpy(tryLocalPDB, 512, srcPath);
-		rtm::strlCpy(const_cast<char*>(rtm::pathGetExt(tryLocalPDB)), 5, ".pdb");
-		hr = pIDiaDataSource->loadDataFromPdb((LPOLESTR)rtm::MultiToWide(tryLocalPDB));
-	}
-
-	if (FAILED(hr))
-	{
-		pIDiaDataSource->Release();
-
 		// Hacky desperate attempt to find PDB file where EXE resides
-		const char* exe = rtm::strStr(srcPath, ".exe");
-		if (exe)
+		size_t len = wcslen(moduleName) - 1;
+		while ((len > 0) && (moduleName[len] != '.'))
+			--len;
+
+		if (len > 0)
 		{
-			char pdb[2048];
-			rtm::strlCpy(pdb, RTM_NUM_ELEMENTS(pdb), srcPath);
-			rtm::strlCpy(&pdb[exe-srcPath], RTM_NUM_ELEMENTS(pdb) - uint32_t(exe-srcPath), ".pdb");
-			if (INVALID_FILE_ATTRIBUTES != GetFileAttributesA(pdb))
+			wcscpy(moduleName, L".pdb");
+			if (INVALID_FILE_ATTRIBUTES != GetFileAttributesW(moduleName))
 			{
-				rtm::strlCpy(_outSymbolPath, 2048, pdb);
+				wcscpy(_outSymbolPath, moduleName);
+				pIDiaDataSource->Release();
 				return true;
 			}
 		}
-
+		pIDiaDataSource->Release();
 		return false;
 	}
 
-	rtm::WideToMulti result(outSymbolPath);
-	rtm::strlCpy(_outSymbolPath, 2048, result);
-	
+	wcscpy(_outSymbolPath, outSymbolPath);
 	pIDiaDataSource->Release();
 	return true;
 }
@@ -255,10 +247,10 @@ void PDBFile::close()
 	}
 }
 
-bool PDBFile::load(const char* _filename)
+bool PDBFile::load(const wchar_t* _filename)
 {
 	if (!_filename) return false;
-	if (rtm::strLen(_filename) == 0) return false;
+	if (wcslen(_filename) == 0) return false;
 
 	if (m_pIDiaDataSource == nullptr)
 	{
@@ -270,8 +262,7 @@ bool PDBFile::load(const char* _filename)
 
 	bool bRet = false;
 
-	const char* ext = rtm::pathGetExt(_filename);
-	if (ext && (rtm::strCmp(ext, s_PDB_File_Extension)==0))
+	if (INVALID_FILE_ATTRIBUTES != GetFileAttributesW(_filename))
 	{
 		if (loadSymbolsFileWithoutValidation(_filename))
 		{
@@ -420,7 +411,7 @@ uint64_t PDBFile::getSymbolID(uint64_t _address)
 	return ID;
 }
 
-bool PDBFile::loadSymbolsFileWithoutValidation(const char* _PdbFileName)
+bool PDBFile::loadSymbolsFileWithoutValidation(const wchar_t* _PdbFileName)
 {
 	bool bRet = false;
 	IDiaDataSource* pIDiaDataSource = m_pIDiaDataSource;
@@ -429,7 +420,7 @@ bool PDBFile::loadSymbolsFileWithoutValidation(const char* _PdbFileName)
 	{
 		bool bContinue = false;
 
-		HRESULT hr = pIDiaDataSource->loadDataFromPdb(rtm::MultiToWide(_PdbFileName));
+		HRESULT hr = pIDiaDataSource->loadDataFromPdb(_PdbFileName);
 		
 		if(SUCCEEDED(hr))
 			bContinue = true;
