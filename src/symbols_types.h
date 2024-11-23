@@ -16,6 +16,7 @@ namespace rdebug {
 
 struct ResolveInfo
 {
+	static const uint32_t SYM_SERVER_BUFFER_SIZE = 32 * 1024;
 	static const uint32_t SCRATCH_MEM_SIZE = 64 * 1024;
 
 	typedef void(*fnParseSymbol)(const char* _buff, StackFrame& _frame);

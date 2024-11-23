@@ -126,6 +126,8 @@ void parseSymbolMapGNU(const char*  _buffer, SymbolMap& _symMap);
 void parseSymbolMapPS3(const char*  _buffer, SymbolMap& _symMap);
 
 #if RTM_PLATFORM_WINDOWS
+extern wchar_t g_symStore[ResolveInfo::SYM_SERVER_BUFFER_SIZE];
+
 bool loadPDB(Module& _module)
 {
 	if (!_module.m_resolver->m_PDBFile)
@@ -133,7 +135,9 @@ bool loadPDB(Module& _module)
 		_module.m_resolver->m_PDBFile = rtm_new<PDBFile>();
 		wchar_t symbolPath[1024];
 		wcscpy(symbolPath, L"");
-		findSymbol(_module.m_module.m_modulePath, symbolPath, _module.m_resolver->m_symbolStore);
+		const char* symStore = _module.m_resolver->m_symbolStore ? _module.m_resolver->m_symbolStore : (const char*)g_symStore;
+		findSymbol(_module.m_module.m_modulePath, symbolPath, symStore);
+			
 		if (wcscmp(symbolPath, L"") != 0)
 			_module.m_resolver->m_PDBFile->load(symbolPath);
 		else
@@ -142,6 +146,17 @@ bool loadPDB(Module& _module)
 	return _module.m_resolver->m_PDBFile->isLoaded();
 }
 #endif // RTM_PLATFORM_WINDOWS
+
+wchar_t	 g_symStore[ResolveInfo::SYM_SERVER_BUFFER_SIZE] = { 0 };
+
+void symbolSetServerSource(const wchar_t* _symStore)
+{
+	size_t len = wcslen(_symStore);
+	if (!len)
+		return;
+
+	wcscpy(g_symStore, _symStore);
+}
 
 uintptr_t symbolResolverCreate(ModuleInfo* _moduleInfos, uint32_t _numInfos, const char* _executable, module_load_cb _callback, void* _data)
 {

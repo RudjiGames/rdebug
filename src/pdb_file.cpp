@@ -5,6 +5,7 @@
 
 #include <rdebug_pch.h>
 #include <rdebug/src/pdb_file.h>
+#include <rdebug/src/symbols_types.h>
 
 #if RTM_PLATFORM_WINDOWS
 
@@ -138,6 +139,8 @@ HRESULT createDiaDataSource(void** _ptr)
 #endif // RTM_COMPILER_MSVC
 	return hr;
 }
+#pragma optimize("",off)
+extern wchar_t	 g_symStore[ResolveInfo::SYM_SERVER_BUFFER_SIZE];
 
 bool findSymbol(const char* _path, wchar_t _outSymbolPath[4096], const char* _symbolStore)
 {
@@ -153,7 +156,7 @@ bool findSymbol(const char* _path, wchar_t _outSymbolPath[4096], const char* _sy
 	rtm::MultiToWide symbolStore(_symbolStore, false);
 
 	wchar_t symStoreBuffer[32 * 1024];
-	wcscpy(symStoreBuffer, L"");
+	wcscpy(symStoreBuffer, g_symStore);
 
 	// The file path is not needed in the search path, loadDataForExe will find from src path automatically.
 	// The semicolon is necessary between each path (or srv*).

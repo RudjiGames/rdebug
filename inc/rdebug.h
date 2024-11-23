@@ -76,6 +76,12 @@ namespace rdebug {
 	///
 	void shutDown(); 
 
+	/// Sets symbol server path
+	///
+	/// @param _symStore
+	///
+	void symbolSetServerSource(const wchar_t* _symStore);
+
 	/// Creates debug symbol resolver based on 
 	///
 	/// @param _moduleInfos
@@ -83,17 +89,17 @@ namespace rdebug {
 	/// @param _tc
 	/// @param _executable
 	///
-	uintptr_t	symbolResolverCreate(ModuleInfo* _moduleInfos, uint32_t _numInfos, const char* _executable, module_load_cb _callback = 0, void* _data = 0);
+	uintptr_t symbolResolverCreate(ModuleInfo* _moduleInfos, uint32_t _numInfos, const char* _executable, module_load_cb _callback = 0, void* _data = 0);
 
 	/// Creates debug symbol resolver based on 
 	///
-	uintptr_t	symbolResolverCreateForCurrentProcess();
+	uintptr_t symbolResolverCreateForCurrentProcess();
 
 	/// Creates debug symbol resolver based on 
 	///
 	/// @param _resolver
 	///
-	void		symbolResolverDelete(uintptr_t _resolver);
+	void symbolResolverDelete(uintptr_t _resolver);
 
 	/// Creates debug symbol resolver based on 
 	///
@@ -101,7 +107,7 @@ namespace rdebug {
 	/// @param _address
 	/// @param _frame
 	///
-	void		symbolResolverGetFrame(uintptr_t _resolver, uint64_t _address, StackFrame* _frame);
+	void symbolResolverGetFrame(uintptr_t _resolver, uint64_t _address, StackFrame* _frame);
 
 	/// Creates debug symbol resolver based on 
 	///
@@ -109,13 +115,13 @@ namespace rdebug {
 	/// @param _address
 	/// @param _skipCount
 	///
-	uint64_t	symbolResolverGetAddressID(uintptr_t _resolver, uint64_t _address);
+	uint64_t symbolResolverGetAddressID(uintptr_t _resolver, uint64_t _address);
 
 	/// Returns true if binary at the given path is 64bit
 	///
 	/// @param _path
 	///
-	bool		processIs64bitBinary(const char* _path);
+	bool processIs64bitBinary(const char* _path);
 
 	/// Creates and runs a new process with injected DLL
 	///
@@ -124,28 +130,28 @@ namespace rdebug {
 	/// @param _cmdLine
 	/// @param _workingDir
 	///
-	bool		processInjectDLL(const char* _executablePath, const char* _DLLPath, const char* _cmdLine, const char* _workingDir, uint32_t* _pid = 0);
+	bool processInjectDLL(const char* _executablePath, const char* _DLLPath, const char* _cmdLine, const char* _workingDir, uint32_t* _pid = 0);
 
 	/// Create and run a new process given the command line
 	///
 	/// @param _cmdLine
 	///
-	bool		processRun(const char* _cmdLine, bool _hideWindow = false, uint32_t* _exitCode = 0);
+	bool processRun(const char* _cmdLine, bool _hideWindow = false, uint32_t* _exitCode = 0);
 
 	/// Run a new process and return the console output
 	///
 	/// @param _cmdLine
 	///
-	char*		processGetOutputOf(const char* _cmdLine, bool _redirectIO = false);
+	char* processGetOutputOf(const char* _cmdLine, bool _redirectIO = false);
 
 	/// Release memory previously allocated by processGetOutputOf
 	///
 	/// @param _cmdLine
 	///
-	void		processReleaseOutput(const char* _output);
+	void processReleaseOutput(const char* _output);
 
 	/// 
-	void		addressToString(uint64_t _address, char* _buffer);
+	void addressToString(uint64_t _address, char* _buffer);
 
 } // namespace rdebug
 
