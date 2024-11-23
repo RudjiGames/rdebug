@@ -139,7 +139,7 @@ HRESULT createDiaDataSource(void** _ptr)
 #endif // RTM_COMPILER_MSVC
 	return hr;
 }
-#pragma optimize("",off)
+
 extern wchar_t	 g_symStore[ResolveInfo::SYM_SERVER_BUFFER_SIZE];
 
 bool findSymbol(const char* _path, wchar_t _outSymbolPath[4096], const char* _symbolStore)
