@@ -322,7 +322,7 @@ uintptr_t symbolResolverCreateForCurrentProcess()
 	Toolchain toolchain;
 
 #if RTM_COMPILER_MSVC
-	wchar_t symStoreBuffer[2048];
+	wchar_t symStoreBuffer[4096];
 	if (0 == GetEnvironmentVariableW(L"_NT_SYMBOL_PATH", (LPWSTR)symStoreBuffer, sizeof(symStoreBuffer)))
 		wcscpy(symStoreBuffer, L"");
 	rtm::WideToMulti symStore(symStoreBuffer);
