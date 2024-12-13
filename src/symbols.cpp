@@ -217,7 +217,8 @@ uintptr_t symbolResolverCreate(ModuleInfo* _moduleInfos, uint32_t _numInfos, con
 		std::string quote;
 
 		if ((module.m_module.m_toolchain.m_type == rdebug::Toolchain::GCC) ||
-			(module.m_module.m_toolchain.m_type == rdebug::Toolchain::PS4))
+			(module.m_module.m_toolchain.m_type == rdebug::Toolchain::PS4) ||
+			(module.m_module.m_toolchain.m_type == rdebug::Toolchain::PS5))
 		{
 			if (module.m_module.m_toolchain.m_type == rdebug::Toolchain::GCC)
 				quote = "\"";
@@ -267,6 +268,7 @@ uintptr_t symbolResolverCreate(ModuleInfo* _moduleInfos, uint32_t _numInfos, con
 
 		case rdebug::Toolchain::GCC:
 		case rdebug::Toolchain::PS4:
+		case rdebug::Toolchain::PS5:
 			module.m_resolver->m_parseSym		= parseAddr2LineSymbolInfo;
 			module.m_resolver->m_parseSymMap	= parseSymbolMapGNU;
 			module.m_resolver->m_symbolStore	= 0;
