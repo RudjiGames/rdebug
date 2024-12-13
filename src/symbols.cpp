@@ -196,7 +196,7 @@ uintptr_t symbolResolverCreate(ModuleInfo* _moduleInfos, uint32_t _numInfos, con
 
 		if (ext)
 		{
-			if ((rtm::striCmp(ext, "EXE") == 0) || (rtm::striCmp(ext, "ELF") == 0))
+			if ((rtm::striCmp(ext, "EXE") == 0) || (rtm::striCmp(ext, "ELF") == 0) || (rtm::striCmp(ext, "SELF") == 0))
 				executablePath = _moduleInfos[i].m_modulePath;
 
 			if (((rtm::striCmp(module.m_moduleName, exeName) == 0)) &&
