@@ -182,10 +182,11 @@ uintptr_t symbolResolverCreate(ModuleInfo* _moduleInfos, uint32_t _numInfos, con
 		if ((rtm::striCmp(tmpName,"MTUNERDLL32.DLL") == 0) || (rtm::striCmp(tmpName,"MTUNERDLL64.DLL") == 0))
 			module.m_isRTMdll = true;
 
-		const char* ext		= rtm::pathGetExt(tmpName);
+		const char* ext	= rtm::pathGetExt(tmpName);
+		const bool crossToolChain = ((rtm::striCmp(ext, "ELF") == 0) || (rtm::striCmp(ext, "SELF") == 0)) ? true : false;
 
 		// on Windows, fix toolchain for each module
-		if ((rtm::striCmp(ext, "EXE") == 0) || (rtm::striCmp(ext, "DLL") == 0))
+		if (!crossToolChain)
 		{
 #if RTM_PLATFORM_WINDOWS
 			int hasRH = hasRichHeader(module.m_module.m_modulePath);
@@ -196,12 +197,11 @@ uintptr_t symbolResolverCreate(ModuleInfo* _moduleInfos, uint32_t _numInfos, con
 
 		if (ext)
 		{
-			if ((rtm::striCmp(ext, "EXE") == 0) || (rtm::striCmp(ext, "ELF") == 0) || (rtm::striCmp(ext, "SELF") == 0))
+			if ((rtm::striCmp(ext, "EXE") == 0) || crossToolChain)
 				executablePath = _moduleInfos[i].m_modulePath;
 
-			if (((rtm::striCmp(module.m_moduleName, exeName) == 0)) &&
-				!((rtm::striCmp(ext, "EXE") == 0) || (rtm::striCmp(ext, "DLL") == 0)))
-					module.m_resolver->m_baseAddress4addr2Line = module.m_module.m_baseAddress;
+			if (((rtm::striCmp(module.m_moduleName, exeName) == 0)) && crossToolChain)
+				module.m_resolver->m_baseAddress4addr2Line = module.m_module.m_baseAddress;
 		}
 
 		if (executablePath)
