@@ -63,8 +63,8 @@ for:
     install:
       - build\tools\bin\windows\genie.exe --file=rdebug\genie\genie.lua vs2022
       
-    build:
-      project: ../.build/windows/vs2022/rdebug/projects/rdebug.sln
+    build: 
+      project: rdebug\.build\windows\vs2022\rdebug\projects\rdebug.sln
 
 # ======================================
 # Linux
