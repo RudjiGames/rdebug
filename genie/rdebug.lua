@@ -38,7 +38,7 @@ function projectExtraConfig_rdebug()
 			buildoptions { "-Wno-unknown-pragmas" }
 		end
 	configuration { "linux-*" }
-		buildoptions { "-Wimplicit-fallthrough=" }
+		buildoptions { "-Wimplicit-fallthrough=0" }
 	configuration {}
 end
 
