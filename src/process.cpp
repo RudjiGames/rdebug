@@ -356,8 +356,8 @@ void addressToString(uint64_t _address, char* _buffer)
 	for (int i=c.d[1]?0:4; i<8; ++i)
 	{
 		char cc = c.h[7 - i];
-		_buffer[ptr++] = rtm::toHexNum((char)(cc >> 4));
-		_buffer[ptr++] = rtm::toHexNum((char)(cc & 0xf));
+		_buffer[ptr++] = rtm::charToHexNum((char)(cc >> 4));
+		_buffer[ptr++] = rtm::charToHexNum((char)(cc & 0xf));
 	}
 	_buffer[ptr] = '\0';
 }
