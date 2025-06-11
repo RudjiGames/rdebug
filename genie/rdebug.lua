@@ -37,6 +37,9 @@ function projectExtraConfig_rdebug()
 		if "mingw-gcc" == _OPTIONS["gcc"] then -- on windows, we patch heap functions, no need to wrap malloc family of funcs
 			buildoptions { "-Wno-unknown-pragmas" }
 		end
+	coonfiguration { "linux-*" }
+		buildoptions { "-Wimplicit-fallthrough=" }
+	coonfiguration {}
 end
 
 function projectAdd_rdebug()
