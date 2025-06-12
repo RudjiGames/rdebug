@@ -11,7 +11,7 @@
 
 #include <rbase/inc/platform.h>
 #include <rbase/inc/stringfn.h>
-#include <rbase/inc/winchar.h>
+#include <rbase/inc/widechar.h>
 #include <rbase/inc/libhandler.h>
 #include <rbase/inc/path.h>
 
