@@ -20,17 +20,17 @@
 #include <Psapi.h>
 #include <DIA/include/dia2.h>
 
-inline static uint16_t read16(FILE* _file, uint16_t _pos)
+inline static uint16_t read16(FILE* _file, uint32_t _pos)
 {
-	fseek(_file, _pos, SEEK_SET);
+	fseek(_file, (long)_pos, SEEK_SET);
 	uint8_t buf[2];
 	fread(buf, 1, 2, _file);
-	return (uint32_t)buf[0] | (uint32_t)buf[1] << 8;
+	return (uint16_t)((uint32_t)buf[0] | (uint32_t)buf[1] << 8);
 }
 
-inline static uint32_t read32(FILE* _file, uint16_t _pos)
+inline static uint32_t read32(FILE* _file, uint32_t _pos)
 {
-	fseek(_file, _pos, SEEK_SET);
+	fseek(_file, (long)_pos, SEEK_SET);
 	uint8_t buf[4];
 	fread(buf, 1, 4, _file);
 	return (uint32_t)buf[0] | (uint32_t)buf[1] << 8 | (uint32_t)buf[2] << 16 | (uint32_t)buf[3] << 24;
@@ -83,6 +83,94 @@ int hasRichHeader(char const* _filePath)
 		RH_RET(0);
 
 	RH_RET(1);
+}
+
+// Returns 1 if the PE file contains a CodeView (PDB) debug directory entry, 0 otherwise.
+// Used as a fallback when no Rich Header is present to distinguish MSVC from GCC toolchains.
+int hasPDBDebugInfo(char const* _filePath)
+{
+	FILE* file = fopen(_filePath, "rb");
+	if (!file)
+		return 0;
+
+	// Verify MZ signature
+	uint16_t mz = read16(file, 0);
+	if (mz != 0x5A4D)
+		RH_RET(0);
+
+	// e_lfanew at offset 0x3C gives the PE header file offset
+	uint32_t peOffset = read32(file, 0x3c);
+
+	// Verify PE signature "PE\0\0"
+	uint32_t peSig = read32(file, peOffset);
+	if (peSig != 0x00004550)
+		RH_RET(0);
+
+	// COFF header: NumberOfSections at peOffset+6, SizeOfOptionalHeader at peOffset+20
+	uint16_t numSections    = read16(file, peOffset + 6);
+	uint16_t sizeOfOptHdr   = read16(file, peOffset + 20);
+
+	// Optional header starts at peOffset+24; read magic to distinguish PE32/PE32+
+	uint32_t optHdrOffset = peOffset + 24;
+	uint16_t optMagic     = read16(file, optHdrOffset);
+
+	// Data directories begin at offset 96 (PE32) or 112 (PE32+) within the optional header
+	uint32_t dataDirBase;
+	if (optMagic == 0x020B)       // PE32+ (64-bit)
+		dataDirBase = optHdrOffset + 112;
+	else                          // PE32 (32-bit), magic 0x010B
+		dataDirBase = optHdrOffset + 96;
+
+	// IMAGE_DIRECTORY_ENTRY_DEBUG is index 6; each entry is 8 bytes (RVA + Size)
+	uint32_t debugDirRVA  = read32(file, dataDirBase + 6 * 8);
+	uint32_t debugDirSize = read32(file, dataDirBase + 6 * 8 + 4);
+
+	if (debugDirRVA == 0 || debugDirSize == 0)
+		RH_RET(0);
+
+	// Section headers start immediately after the optional header
+	uint32_t sectionsBase = peOffset + 24 + sizeOfOptHdr;
+
+	// Convert the debug directory RVA to a file offset via section headers (40 bytes each)
+	uint32_t debugDirFileOff = 0;
+	for (uint16_t s = 0; s < numSections; ++s)
+	{
+		uint32_t sectBase      = sectionsBase + (uint32_t)s * 40;
+		uint32_t sectVA        = read32(file, sectBase + 12);
+		uint32_t sectRawSize   = read32(file, sectBase + 16);
+		uint32_t sectRawOffset = read32(file, sectBase + 20);
+
+		if (debugDirRVA >= sectVA && debugDirRVA < sectVA + sectRawSize)
+		{
+			debugDirFileOff = sectRawOffset + (debugDirRVA - sectVA);
+			break;
+		}
+	}
+
+	if (debugDirFileOff == 0)
+		RH_RET(0);
+
+	// Walk IMAGE_DEBUG_DIRECTORY entries (each 28 bytes); look for CodeView (Type == 2)
+	uint32_t numEntries = debugDirSize / 28;
+	for (uint32_t e = 0; e < numEntries; ++e)
+	{
+		uint32_t entryBase = debugDirFileOff + e * 28;
+		uint32_t type      = read32(file, entryBase + 12);
+
+		if (type == 2) // IMAGE_DEBUG_TYPE_CODEVIEW
+		{
+			uint32_t ptrRawData = read32(file, entryBase + 24);
+			if (ptrRawData != 0)
+			{
+				uint32_t sig = read32(file, ptrRawData);
+				// "RSDS" (0x53445352) = PDB 7.0,  "NB10" (0x3031424E) = PDB 2.0
+				if (sig == 0x53445352 || sig == 0x3031424E)
+					RH_RET(1);
+			}
+		}
+	}
+
+	RH_RET(0);
 }
 
 #if RTM_COMPILER_MSVC
@@ -191,7 +279,18 @@ uintptr_t symbolResolverCreate(ModuleInfo* _moduleInfos, uint32_t _numInfos, con
 #if RTM_PLATFORM_WINDOWS
 			int hasRH = hasRichHeader(module.m_module.m_modulePath);
 			if (hasRH >= 0)
-				module.m_module.m_toolchain.m_type = (hasRH == 1) ? rdebug::Toolchain::MSVC : rdebug::Toolchain::GCC;
+			{
+				if (hasRH == 1)
+					module.m_module.m_toolchain.m_type = rdebug::Toolchain::MSVC;
+				else
+				{
+					// No Rich Header — use PDB/CodeView debug info as fallback before assuming GCC
+					if (hasPDBDebugInfo(module.m_module.m_modulePath))
+						module.m_module.m_toolchain.m_type = rdebug::Toolchain::MSVC;
+					else
+						module.m_module.m_toolchain.m_type = rdebug::Toolchain::GCC;
+				}
+			}
 #endif // RTM_PLATFORM_WINDOWS
 		}
 
