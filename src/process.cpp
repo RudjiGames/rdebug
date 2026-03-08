@@ -79,6 +79,7 @@ bool processInjectDLL(const char* _executablePath, const char* _DLLPath, const c
 	if (!acquireDebugPrivileges(pInfo.hProcess))
 	{
 		TerminateProcess(pInfo.hProcess, 0);
+		CloseHandle(pInfo.hThread);
 		CloseHandle(pInfo.hProcess);
 		return false;
 	}
@@ -96,7 +97,9 @@ bool processInjectDLL(const char* _executablePath, const char* _DLLPath, const c
 	SIZE_T numBytesWritten;
 	if (!WriteProcessMemory(pInfo.hProcess, remoteMem, dllPathWide, dllPathLen*2, &numBytesWritten))
 	{
+		VirtualFreeEx(pInfo.hProcess, remoteMem, 0, MEM_RELEASE);
 		TerminateProcess(pInfo.hProcess, 0);
+		CloseHandle(pInfo.hThread);
 		CloseHandle(pInfo.hProcess);
 		return false;
 	}
@@ -105,19 +108,25 @@ bool processInjectDLL(const char* _executablePath, const char* _DLLPath, const c
 
 	if (remoteThread == NULL)
 	{
+		VirtualFreeEx(pInfo.hProcess, remoteMem, 0, MEM_RELEASE);
 		TerminateProcess(pInfo.hProcess, 0);
+		CloseHandle(pInfo.hThread);
 		CloseHandle(pInfo.hProcess);
 		return false;
 	}
 	else
 	{
 		WaitForSingleObject(remoteThread, INFINITE);
+		CloseHandle(remoteThread);
 	}
 
+	VirtualFreeEx(pInfo.hProcess, remoteMem, 0, MEM_RELEASE);
 	ResumeThread(pInfo.hThread);
 	if (_pid)
 		*_pid = pInfo.dwProcessId;
 
+	CloseHandle(pInfo.hThread);
+	CloseHandle(pInfo.hProcess);
 	return true;
 }
 
@@ -147,6 +156,7 @@ bool processRun(const char* _cmdLine, bool _hideWindow, uint32_t* _exitCode)
 	if (_exitCode)
 		*_exitCode = exitCode;
 
+	CloseHandle(pInfo.hThread);
 	CloseHandle(pInfo.hProcess);
 	return true;
 }
