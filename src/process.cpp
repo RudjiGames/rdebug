@@ -78,6 +78,8 @@ bool processInjectDLL(const char* _executablePath, const char* _DLLPath, const c
 
 	if (!acquireDebugPrivileges(pInfo.hProcess))
 	{
+		TerminateProcess(pInfo.hProcess, 0);
+		CloseHandle(pInfo.hProcess);
 		return false;
 	}
 

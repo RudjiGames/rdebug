@@ -164,7 +164,7 @@ bool findSymbol(const char* _path, wchar_t _outSymbolPath[4096], const char* _sy
 
 	if (!_path || (rtm::strLen(_path) == 0))
 	{
-		GetModuleFileNameW(nullptr, moduleName, sizeof(moduleName));
+		GetModuleFileNameW(nullptr, moduleName, (DWORD)(RTM_NUM_ELEMENTS(moduleName)));
 	}
 	else
 	{
@@ -179,7 +179,7 @@ bool findSymbol(const char* _path, wchar_t _outSymbolPath[4096], const char* _sy
 
 	{
 		size_t len = wcslen(symStoreBuffer);
-		GetEnvironmentVariableW(L"_NT_SYMBOL_PATH", (LPWSTR)&symStoreBuffer[len], sizeof(symStoreBuffer));
+		GetEnvironmentVariableW(L"_NT_SYMBOL_PATH", (LPWSTR)&symStoreBuffer[len], (DWORD)(RTM_NUM_ELEMENTS(symStoreBuffer) - len));
 	}
 
 	wchar_t outSymbolPath[32 * 1024];
@@ -197,7 +197,7 @@ bool findSymbol(const char* _path, wchar_t _outSymbolPath[4096], const char* _sy
 
 		if (len > 0)
 		{
-			wcscpy(moduleName, L".pdb");
+			wcscpy(&moduleName[len], L".pdb");
 			if (INVALID_FILE_ATTRIBUTES != GetFileAttributesW(moduleName))
 			{
 				wcscpy(_outSymbolPath, moduleName);

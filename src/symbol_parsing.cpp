@@ -134,10 +134,10 @@ bool isHex(char _c)
 	if ((_c >= '0') && (_c <= '9'))
 		return true;
 	else
-		if ((_c >= 'a') && (_c <= 'z'))
+		if ((_c >= 'a') && (_c <= 'f'))
 			return true;
 		else
-			if ((_c >= 'A') && (_c <= 'Z'))
+			if ((_c >= 'A') && (_c <= 'F'))
 				return true;
 	return false;
 }
@@ -147,10 +147,10 @@ uint64_t fromHex(char _c, bool& _stop)
 	if ((_c >= '0') && (_c <= '9'))
 		return (_c - '0');
 	else
-		if ((_c >= 'a') && (_c <= 'z'))
+		if ((_c >= 'a') && (_c <= 'f'))
 			return 10 + (_c - 'a');
 		else
-			if ((_c >= 'A') && (_c <= 'Z'))
+			if ((_c >= 'A') && (_c <= 'F'))
 				return 10 + (_c - 'A');
 	_stop = true;
 	return 0;
