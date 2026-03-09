@@ -83,7 +83,10 @@ class DiaLoadCallBack : public IDiaLoadCallback2
 	ULONG	STDMETHODCALLTYPE Release()
 	{
 		if (--m_refCount == 0)
-			delete this; 
+		{
+			delete this;
+			return 0;
+		}
 		return m_refCount;
 	}
     HRESULT	STDMETHODCALLTYPE QueryInterface( REFIID rid, void **ppUnk )
@@ -323,11 +326,15 @@ bool PDBFile::getSymbolByAddress(uint64_t _address, rdebug::StackFrame& _frame)
 
 			if (SymName == nullptr)
 				sym->get_name(&SymName);
-	
-			IDiaEnumLineNumbers* lineEnum = nullptr;
-			if (FAILED(m_pIDiaSession->findLinesByVA(_address,1,&lineEnum)))
-				return false;
 
+			IDiaEnumLineNumbers* lineEnum = nullptr;
+			if (FAILED(m_pIDiaSession->findLinesByVA(_address, 1, &lineEnum)))
+			{
+				SysFreeString(SymName);
+				sym->Release();				
+				return false;
+			}
+			
 			ULONG celt = 0;
 			for (;;)
 			{
@@ -381,7 +388,11 @@ bool PDBFile::getSymbolByAddress(uint64_t _address, rdebug::StackFrame& _frame)
 				}
 
 				if (celt != 1)
+				{
+					if (Line)
+						Line->Release();
 					break;
+				}
 			}
 		
 			SysFreeString(SymName);

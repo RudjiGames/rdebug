@@ -399,7 +399,7 @@ uintptr_t symbolResolverCreate(ModuleInfo* _moduleInfos, uint32_t _numInfos, con
 		resolver->m_modules.push_back(module);
 	}
 
-	std::sort(&resolver->m_modules[0], &resolver->m_modules[resolver->m_modules.size()-1],
+	std::sort(&resolver->m_modules[0], &resolver->m_modules[resolver->m_modules.size()],
 		[](const Module& a, const Module& b)
 		{ 
 			return a.m_module.m_baseAddress < b.m_module.m_baseAddress; 
@@ -498,6 +498,7 @@ uintptr_t symbolResolverCreateForCurrentProcess()
 
 void symbolResolverDelete(uintptr_t _resolver)
 {
+	RTM_ASSERT(_resolver, "Invalid resolver!");
 	Resolver* resolver = (Resolver*)_resolver;
 
 	for (uint32_t i=0; i<resolver->m_modules.size(); ++i)
@@ -565,7 +566,15 @@ class DiaLoadCallBack : public IDiaLoadCallback2
 
     //	IUnknown
 	ULONG STDMETHODCALLTYPE AddRef() { m_RefCount++; return m_RefCount; }
-	ULONG STDMETHODCALLTYPE Release() { if (--m_RefCount == 0) delete this; return m_RefCount; }
+	ULONG STDMETHODCALLTYPE Release()
+	{
+		if (--m_RefCount == 0)
+		{
+			delete this;
+			return 0;
+		}
+		return m_RefCount;
+	}
     HRESULT STDMETHODCALLTYPE QueryInterface( REFIID rid, void **ppUnk )
 	{
 		if (ppUnk == NULL) 
@@ -633,15 +642,20 @@ inline const Module* addressGetModule(uintptr_t _resolver, uint64_t _address)
 
 struct StringData
 {
+	const static int STRING_DATA_SIZE = 32 * 1024 - 4;
+
 	uint32_t m_length;
-	char	 m_data[32 * 1024 - 4];
+	char	 m_data[STRING_DATA_SIZE];
 	StringData() : m_length(0) {}
 };
 
 void rustDemangleCallback(const char* data, size_t len, void* opaque)
 {
 	StringData* str = (StringData*)opaque;
-	memcpy(&str->m_data[str->m_length], data, len);
+	rtm::memCopy(&str->m_data[str->m_length], StringData::STRING_DATA_SIZE - str->m_length, data, len);
+	str->m_length += len;
+	RTM_ASSERT(str->m_length < StringData::STRING_DATA_SIZE, "StringData buffer overflow in rustDemangleCallback!");
+	str->m_data[str->m_length] = '\0';
 }
 
 void symbolResolverGetFrame(uintptr_t _resolver, uint64_t _address, StackFrame* _frame)

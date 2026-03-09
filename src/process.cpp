@@ -31,33 +31,46 @@ bool processIs64bitBinary(const char* _path)
 	return false;
 }
 
+//
+//  SetPrivilege enables/disables process token privilege.
+//
+BOOL SetPrivilege(HANDLE hToken, LPCTSTR lpszPrivilege, BOOL bEnablePrivilege)
+{
+	LUID luid;
+	BOOL bRet = FALSE;
+
+	if (LookupPrivilegeValue(NULL, lpszPrivilege, &luid))
+	{
+		TOKEN_PRIVILEGES tp;
+
+		tp.PrivilegeCount = 1;
+		tp.Privileges[0].Luid = luid;
+		tp.Privileges[0].Attributes = (bEnablePrivilege) ? SE_PRIVILEGE_ENABLED : 0;
+		//
+		//  Enable the privilege or disable all privileges.
+		//
+		if (AdjustTokenPrivileges(hToken, FALSE, &tp, NULL, (PTOKEN_PRIVILEGES)NULL, (PDWORD)NULL))
+		{
+			//
+			//  Check to see if you have proper access.
+			//  You may get "ERROR_NOT_ALL_ASSIGNED".
+			//
+			bRet = (GetLastError() == ERROR_SUCCESS);
+		}
+	}
+	return bRet;
+}
+
 bool acquireDebugPrivileges(HANDLE _process)
 {
-	bool success = false;
-
 	HANDLE hToken;
-	TOKEN_PRIVILEGES tokenPriv;
-	LUID luidDebug;
-	if(OpenProcessToken(_process, TOKEN_ADJUST_PRIVILEGES, &hToken))
+	if (OpenProcessToken(_process, TOKEN_ADJUST_PRIVILEGES, &hToken))
 	{
-		if(LookupPrivilegeValueA("", SE_DEBUG_NAME, &luidDebug))
-		{
-			tokenPriv.PrivilegeCount           = 1;
-			tokenPriv.Privileges[0].Luid       = luidDebug;
-			tokenPriv.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
-
-			if(AdjustTokenPrivileges(hToken, FALSE, &tokenPriv, sizeof(tokenPriv), NULL, NULL) == 0)
-				success = false;
-			else
-				success = true;
-		}
-		else
-			success = false;
+		SetPrivilege(hToken, SE_DEBUG_NAME, TRUE);
+		CloseHandle(hToken);
+		return true;
 	}
-	else
-		success = false;
-
-	return success;
+	return false;
 }
 
 bool processInjectDLL(const char* _executablePath, const char* _DLLPath, const char* _cmdLine, const char* _workingDir, uint32_t* _pid)
@@ -216,8 +229,8 @@ BOOL createChildProcess(const char* _cmdLine, PipeHandles* _handles, bool _redir
 		h[1] = piProcInfo.hProcess;
 
 		std::string buffer, wbuffer;
-		buffer.reserve(g_bufferSize);
-		wbuffer.reserve(g_bufferSize);
+		buffer.resize(g_bufferSize + 1); // +1 for null terminator
+		wbuffer.resize(g_bufferSize + 1);
 		
 		for (;;)
 		{
@@ -253,24 +266,23 @@ void CreatePipes(PipeHandles* _handles)
 	saAttr.bInheritHandle		= TRUE;
 	saAttr.lpSecurityDescriptor	= NULL; 
 
-	CreatePipe(&_handles->m_stdOut_Read, &_handles->m_stdOut_Write, &saAttr, 4096*160);
-	SetHandleInformation(_handles->m_stdOut_Read, HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT);
+	CreatePipe(&_handles->m_stdOut_Read, &_handles->m_stdOut_Write, &saAttr, g_bufferSize);
+	SetHandleInformation(_handles->m_stdOut_Read, HANDLE_FLAG_INHERIT, 0);
 
 	saAttr.nLength				= sizeof(SECURITY_ATTRIBUTES); 
 	saAttr.bInheritHandle		= TRUE;
 	saAttr.lpSecurityDescriptor	= NULL; 
 
-	CreatePipe(&_handles->m_stdIn_Read, &_handles->m_stdIn_Write, &saAttr, 4096*160);
-	SetHandleInformation(_handles->m_stdIn_Write, HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT);
+	CreatePipe(&_handles->m_stdIn_Read, &_handles->m_stdIn_Write, &saAttr, g_bufferSize);
+	SetHandleInformation(_handles->m_stdIn_Write, HANDLE_FLAG_INHERIT, 0);
 }
 
 DWORD ReadFromPipe(std::string& _buffer, PipeHandles* _handles)
 { 
 	DWORD dwRead = 0;
 	BOOL bSuccess = FALSE;
-	HANDLE hParentStdOut = GetStdHandle(STD_OUTPUT_HANDLE);
 
-	char utf8buffer[8192+1];
+	char utf8buffer[g_bufferSize * 2];
 	for (;;) 
 	{ 
 		DWORD bytesAvailable = 0;
@@ -285,7 +297,7 @@ DWORD ReadFromPipe(std::string& _buffer, PipeHandles* _handles)
 		if (dwRead < 8192)
 			break;
 	}
-	CloseHandle(hParentStdOut);
+
 	return dwRead;
 } 
 

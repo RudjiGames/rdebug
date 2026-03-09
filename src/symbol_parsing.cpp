@@ -58,9 +58,9 @@ void parseAddr2LineSymbolInfo(const char* _str, StackFrame& _frame)
 	{
 		rtm::strlCpy(_frame.m_file, sizeof(_frame.m_file), ptr);
 		len = rtm::strLen(_frame.m_file);
-		while (_frame.m_file[--len] != ':');
+		_frame.m_line = atoi(ptr + len);
+		while (len > 0 && _frame.m_file[--len] != ':');
 		_frame.m_file[len] = '\0';
-		_frame.m_line = atoi(&_frame.m_file[len+1]);
 	}
 }
 
@@ -193,7 +193,7 @@ bool parseHex(uint64_t& _offset, const char*& _buffer)
 		return false;
 
 	_offset = offset;
-	_buffer = ++buffer;
+	_buffer = buffer;
 	return true;
 }
 
@@ -248,7 +248,7 @@ void parseSymbolMapLinePS3SNC(const char* _line, SymbolMap& _symMap)
 	while ( charIsSpace(*_line) && !charIsEOL(*_line)) ++_line;
 
 	parseSym(sym.m_name, _line);
-	sym.m_offset	= (uint32_t)offset;
+	sym.m_offset	= offset;
 	sym.m_nameHash	= rtm::hashStr(sym.m_name.c_str());
 
 	_symMap.addSymbol(sym);

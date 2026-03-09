@@ -45,25 +45,25 @@ Symbol* SymbolMap::findSymbol(uint64_t _address)
 	while (eidx > sidx)
 	{
 		size_t midx = (sidx + eidx) / 2;
-		Symbol& sym = m_symbols[midx];
+		Symbol* sym = &m_symbols[midx];
 
-		if (sym.m_offset < (int64_t)_address)
+		if (sym->m_offset < (int64_t)_address)
 			sidx = midx;
 		else
 			eidx = midx;
 
 		if (eidx-sidx == 1)
 		{
-			sym = m_symbols[sidx];
+			sym = &m_symbols[sidx];
 
-			if (uint64_t(_address - sym.m_offset) >= sym.m_size)
+			if (uint64_t(_address - sym->m_offset) >= sym->m_size)
 			{
-				sym = m_symbols[eidx];
-				if (uint64_t(_address - sym.m_offset) >= sym.m_size)
+				sym = &m_symbols[eidx];
+				if (uint64_t(_address - sym->m_offset) >= sym->m_size)
 					return 0;
 			}
 
-			return &sym;
+			return sym;
 		}
 	}
 	return 0;
@@ -86,15 +86,23 @@ void SymbolMap::sort()
 
 	std::sort(m_symbols.begin(), m_symbols.end(), sortSymbols);
 	std::vector<Symbol>::iterator it	= m_symbols.begin();
-	std::vector<Symbol>::iterator end	= m_symbols.end() - 1;
+	std::vector<Symbol>::iterator end	= m_symbols.end();
 
 	while (it != end)
 	{
 		Symbol& sym = *it;
 		if (sym.m_size == 0)
 		{
-			Symbol& nextSym = *(it+1);
-			sym.m_size = nextSym.m_offset - 1;
+			std::vector<Symbol>::iterator next = it + 1;
+			if (next != end)
+			{
+				Symbol& nextSym = *(it + 1);
+				sym.m_size = nextSym.m_offset - sym.m_offset;
+			}
+			else
+			{
+				sym.m_size = 1; // if last symbol has zero size, set it to 1 to prevent it from being removed
+			}
 		}
 		++it;
 	}
