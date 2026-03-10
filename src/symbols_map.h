@@ -17,20 +17,32 @@ struct Symbol
 	int64_t			m_offset;
 	uint64_t		m_size;
 	uint32_t		m_line;
-	uint32_t		m_nameHash;
 	std::string		m_file;
 	std::string		m_name;
-
-	Symbol();
 };
 
 struct SymbolMap
 {
-	std::vector<Symbol>	m_symbols;
+	struct SymbolData
+	{
+		int64_t			m_offset;
+		uint64_t		m_size;
+		uint32_t		m_line;
+		uint32_t		m_stringsIndex;
+	};
 
-	void	addSymbol(const Symbol& _sym);
+	struct SymbolStrings
+	{
+		std::string		m_file;
+		std::string		m_name;
+	};
+
+	std::vector<SymbolData>		m_symbols;
+	std::vector<SymbolStrings>	m_symbolStrings;
+
+	void	addSymbol(const char* _name, int64_t _offset, uint64_t _size, uint32_t _line, const char* _file);
 	void	sort();
-	Symbol* findSymbol(uint64_t _address);
+	bool	findSymbol(uint64_t _address, Symbol& _symbol);
 };
 
 } // namespace rdebug

@@ -7,6 +7,7 @@
 #include <rdebug/src/pdb_file.h>
 #include <rdebug/src/symbols_types.h>
 #include <rbase/inc/console.h>
+#include <rbase/inc/hash.h>
 
 #include "../3rd/rust-demangle.h"
 #include "../3rd/rust-demangle.c"
@@ -214,7 +215,7 @@ void parseSymbolMapGNU(const char*  _buffer, SymbolMap& _symMap);
 void parseSymbolMapPS3(const char*  _buffer, SymbolMap& _symMap);
 
 #if RTM_PLATFORM_WINDOWS
-extern wchar_t g_symStore[ResolveInfo::SYM_SERVER_BUFFER_SIZE];
+extern char g_symStore[ResolveInfo::SYM_SERVER_BUFFER_SIZE];
 
 bool loadPDB(Module& _module)
 {
@@ -235,15 +236,15 @@ bool loadPDB(Module& _module)
 }
 #endif // RTM_PLATFORM_WINDOWS
 
-wchar_t	 g_symStore[ResolveInfo::SYM_SERVER_BUFFER_SIZE] = { 0 };
+char	 g_symStore[ResolveInfo::SYM_SERVER_BUFFER_SIZE] = { 0 };
 
-void symbolSetServerSource(const wchar_t* _symStore)
+void symbolSetServerSource(const char* _symStore)
 {
-	size_t len = wcslen(_symStore);
+	size_t len = rtm::strLen(_symStore);
 	if (!len)
 		return;
 
-	wcscpy(g_symStore, _symStore);
+	rtm::strlCpy(g_symStore, ResolveInfo::SYM_SERVER_BUFFER_SIZE, _symStore);
 }
 
 uintptr_t symbolResolverCreate(ModuleInfo* _moduleInfos, uint32_t _numInfos, const char* _executable, module_load_cb _callback, void* _data)
@@ -653,7 +654,7 @@ void rustDemangleCallback(const char* data, size_t len, void* opaque)
 {
 	StringData* str = (StringData*)opaque;
 	rtm::memCopy(&str->m_data[str->m_length], StringData::STRING_DATA_SIZE - str->m_length, data, len);
-	str->m_length += len;
+	str->m_length += (uint32_t)len;
 	RTM_ASSERT(str->m_length < StringData::STRING_DATA_SIZE, "StringData buffer overflow in rustDemangleCallback!");
 	str->m_data[str->m_length] = '\0';
 }
@@ -742,7 +743,6 @@ void symbolResolverGetFrame(uintptr_t _resolver, uint64_t _address, StackFrame* 
 	}
 }
 
-
 uint64_t symbolResolverGetAddressID(uintptr_t _resolver, uint64_t _address)
 {
 	Resolver* resolver = (Resolver*)_resolver;
@@ -781,9 +781,9 @@ uint64_t symbolResolverGetAddressID(uintptr_t _resolver, uint64_t _address)
 		}
 	}
 
-	rdebug::Symbol* sym = module->m_resolver->m_symbolMap.findSymbol(_address);
-	if (sym)
-		return (uint64_t)sym->m_nameHash;
+	rdebug::Symbol sym;;
+	if (module->m_resolver->m_symbolMap.findSymbol(_address, sym))
+		return (uint64_t)rtm::hashStr(sym.m_name.c_str());
 	else
 		return _address;
 }

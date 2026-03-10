@@ -10,34 +10,55 @@
 
 namespace rdebug {
 
-Symbol::Symbol()
-	: m_offset(0)
-	, m_size(0)
-	, m_line(0)
-	, m_nameHash(0)
+void SymbolMap::addSymbol(const char* _name, int64_t _offset, uint64_t _size, uint32_t _line, const char* _file)
 {
-}
-
-void SymbolMap::addSymbol(const Symbol& _sym)
-{
+	SymbolData data;
+	data.m_offset		= _offset;
+	data.m_size			= _size;
+	data.m_line			= _line;
+	data.m_stringsIndex = 0;
+	
 	if (!m_symbols.empty())
 	{
-		Symbol& s = m_symbols[m_symbols.size()-1];
-		if (s.m_offset == _sym.m_offset)
+		SymbolData& s = m_symbols[m_symbols.size()-1];
+		// same offset means same symbol, so update it instead of adding a new one
+		if (s.m_offset == _offset)
 		{
-			m_symbols[m_symbols.size()-1] = _sym;
+			// reuse the same string index for the symbol with the same offset
+			data.m_stringsIndex = s.m_stringsIndex;
+			m_symbols[m_symbols.size()-1] = data;
+			m_symbolStrings[data.m_stringsIndex].m_file = _file;
+			m_symbolStrings[data.m_stringsIndex].m_name = _name;
 			return;
 		}
 	}
 
-	m_symbols.push_back(_sym);
+	m_symbolStrings.push_back({ _file, _name });
+	data.m_stringsIndex = (uint32_t)m_symbolStrings.size() - 1;
+	m_symbols.push_back(data);
 }
 
-Symbol* SymbolMap::findSymbol(uint64_t _address)
+bool SymbolMap::findSymbol(uint64_t _address, Symbol& _symbol)
 {
 	size_t len = m_symbols.size();
 	if (!len)
 		return 0;
+
+	// Handle single-element case
+	if (len == 1)
+	{
+		SymbolData& sym = m_symbols[0];
+		if (uint64_t(_address - sym.m_offset) < sym.m_size)
+		{
+			_symbol.m_offset	= sym.m_offset;
+			_symbol.m_size		= sym.m_size;
+			_symbol.m_line		= sym.m_line;
+			_symbol.m_file		= m_symbolStrings[sym.m_stringsIndex].m_file;
+			_symbol.m_name		= m_symbolStrings[sym.m_stringsIndex].m_name;
+			return true;
+		}
+		return false;
+	}
 
 	size_t sidx = 0;
 	size_t eidx = len - 1;
@@ -45,36 +66,41 @@ Symbol* SymbolMap::findSymbol(uint64_t _address)
 	while (eidx > sidx)
 	{
 		size_t midx = (sidx + eidx) / 2;
-		Symbol* sym = &m_symbols[midx];
+		SymbolData sym = m_symbols[midx];
 
-		if (sym->m_offset < (int64_t)_address)
+		if (sym.m_offset < (int64_t)_address)
 			sidx = midx;
 		else
 			eidx = midx;
 
 		if (eidx-sidx == 1)
 		{
-			sym = &m_symbols[sidx];
+			sym = m_symbols[sidx];
 
-			if (uint64_t(_address - sym->m_offset) >= sym->m_size)
+			if (uint64_t(_address - sym.m_offset) >= sym.m_size)
 			{
-				sym = &m_symbols[eidx];
-				if (uint64_t(_address - sym->m_offset) >= sym->m_size)
-					return 0;
+				sym = m_symbols[eidx];
+				if (uint64_t(_address - sym.m_offset) >= sym.m_size)
+					return false;
 			}
 
-			return sym;
+			_symbol.m_offset	= sym.m_offset;
+			_symbol.m_size		= sym.m_size;
+			_symbol.m_line		= sym.m_line;
+			_symbol.m_file		= m_symbolStrings[sym.m_stringsIndex].m_file;
+			_symbol.m_name		= m_symbolStrings[sym.m_stringsIndex].m_name;
+			return true;
 		}
 	}
-	return 0;
+	return false;
 }
 
-static inline bool sortSymbols(const Symbol& _s1, const Symbol& _s2)
+static inline bool sortSymbols(const SymbolMap::SymbolData& _s1, const SymbolMap::SymbolData& _s2)
 {
 	return _s1.m_offset < _s2.m_offset;
 }
 
-static inline bool isInvalid(const Symbol& _sym)
+static inline bool isInvalid(const SymbolMap::SymbolData& _sym)
 {
 	return _sym.m_size == 0;
 }
@@ -85,18 +111,18 @@ void SymbolMap::sort()
 		return;
 
 	std::sort(m_symbols.begin(), m_symbols.end(), sortSymbols);
-	std::vector<Symbol>::iterator it	= m_symbols.begin();
-	std::vector<Symbol>::iterator end	= m_symbols.end();
+	std::vector<SymbolData>::iterator it	= m_symbols.begin();
+	std::vector<SymbolData>::iterator end	= m_symbols.end();
 
 	while (it != end)
 	{
-		Symbol& sym = *it;
+		SymbolData& sym = *it;
 		if (sym.m_size == 0)
 		{
-			std::vector<Symbol>::iterator next = it + 1;
+			std::vector<SymbolData>::iterator next = it + 1;
 			if (next != end)
 			{
-				Symbol& nextSym = *(it + 1);
+				SymbolData& nextSym = *(it + 1);
 				sym.m_size = nextSym.m_offset - sym.m_offset;
 			}
 			else

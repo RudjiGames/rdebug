@@ -16,7 +16,7 @@ namespace rdebug {
 
 #if RTM_PLATFORM_WINDOWS
 
-const DWORD g_bufferSize	= 4096*160;
+const DWORD g_bufferSize	= 64 * 4096;
 
 bool processIs64bitBinary(const char* _path)
 {
@@ -228,9 +228,8 @@ BOOL createChildProcess(const char* _cmdLine, PipeHandles* _handles, bool _redir
 		h[0] = piProcInfo.hThread;
 		h[1] = piProcInfo.hProcess;
 
-		std::string buffer, wbuffer;
+		std::string buffer;
 		buffer.resize(g_bufferSize + 1); // +1 for null terminator
-		wbuffer.resize(g_bufferSize + 1);
 		
 		for (;;)
 		{
@@ -279,26 +278,27 @@ void CreatePipes(PipeHandles* _handles)
 
 DWORD ReadFromPipe(std::string& _buffer, PipeHandles* _handles)
 { 
-	DWORD dwRead = 0;
-	BOOL bSuccess = FALSE;
+	DWORD retDwRead = 0;
 
-	char utf8buffer[g_bufferSize * 2];
+	char utf8buffer[g_bufferSize + 1];
 	for (;;) 
-	{ 
+	{
+		DWORD dwRead = 0;
 		DWORD bytesAvailable = 0;
 		PeekNamedPipe(_handles->m_stdOut_Read, NULL, 0, NULL, &bytesAvailable, NULL);
-		bSuccess = bytesAvailable && (ReadFile(_handles->m_stdOut_Read, utf8buffer, 8192, &dwRead, NULL) == TRUE);
+		BOOL bSuccess = bytesAvailable && (ReadFile(_handles->m_stdOut_Read, utf8buffer, g_bufferSize, &dwRead, NULL) == TRUE);
 		if (!bSuccess)
 			break;
 
+		retDwRead += dwRead;
 		utf8buffer[dwRead] = '\0';
 		_buffer += utf8buffer;
 
-		if (dwRead < 8192)
+		if (dwRead < g_bufferSize)
 			break;
 	}
 
-	return dwRead;
+	return retDwRead;
 } 
 
 bool processGetOutputOf(const char* _cmdLine, std::string& _buffer, bool _redirect)
@@ -311,7 +311,6 @@ bool processGetOutputOf(const char* _cmdLine, std::string& _buffer, bool _redire
 	if (!success)
 		return false;
 
-	ReadFromPipe(_buffer, &handles);
 	return true;
 }
 
@@ -377,7 +376,7 @@ void addressToString(uint64_t _address, char* _buffer)
 	_buffer[1] = 'x';
 
 	int ptr = 2;
-	for (int i=c.d[1]?0:4; i<8; ++i)
+	for (int i=0; i<8; ++i)
 	{
 		char cc = c.h[7 - i];
 		_buffer[ptr++] = rtm::charToHexNum((char)(cc >> 4));

@@ -81,7 +81,7 @@ namespace rdebug {
 	///
 	/// @param _symStore
 	///
-	void symbolSetServerSource(const wchar_t* _symStore);
+	void symbolSetServerSource(const char* _symStore);
 
 	/// Creates debug symbol resolver based on 
 	///
