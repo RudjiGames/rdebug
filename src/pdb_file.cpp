@@ -243,7 +243,17 @@ namespace rdebug {
 				continue;
 
 			// RSDS layout: signature(4) + GUID(16) + age(4) + pdb_path(variable, null-terminated UTF-8)
-			uint32_t pdbPathOffset = ptrRawData + 24; // 4 + 16 + 4
+			// Read GUID (16 bytes)
+			uint8_t guidBytes[16];
+			fseek(file, (long)(ptrRawData + 4), SEEK_SET);
+			if (fread(guidBytes, 1, 16, file) != 16)
+				continue;
+
+			// Read Age (4 bytes)
+			uint32_t age = readU32(file, ptrRawData + 20);
+
+			// Read PDB path
+			uint32_t pdbPathOffset = ptrRawData + 24;
 			uint32_t pdbPathMaxLen = sizeOfData - 24;
 			if (pdbPathMaxLen == 0 || pdbPathMaxLen > 4096)
 				continue;
@@ -266,6 +276,177 @@ namespace rdebug {
 				continue;
 
 			_outPdbPath[converted] = L'\0';
+			fclose(file);
+			return true;
+		}
+
+		fclose(file);
+		return false;
+	}
+
+	/// Builds a symbol server URL for downloading a PDB file based on the RSDS debug information.
+	/// Format: http(s)://symbolserver/pdbname/GUIDAGE/pdbname
+	/// Example: https://msdl.microsoft.com/download/symbols/ntdll.pdb/1234567890ABCDEF1/ntdll.pdb
+	static bool buildPdbDownloadUrl(const wchar_t* _exePath, const char* _symbolServer, wchar_t* _outUrl, size_t _outSize)
+	{
+		_outUrl[0] = L'\0';
+
+		if (!_symbolServer || rtm::strLen(_symbolServer) == 0)
+			return false;
+
+		rtm::WideToMulti exePathMulti(_exePath);
+		FILE* file = fopen(exePathMulti, "rb");
+		if (!file)
+			return false;
+
+		// Verify MZ signature
+		if (readU16(file, 0) != 0x5A4D)
+		{
+			fclose(file); return false;
+		}
+
+		uint32_t peOffset = readU32(file, 0x3C);
+		if (readU32(file, peOffset) != 0x00004550)
+		{
+			fclose(file); return false;
+		}
+
+		uint16_t numSections = readU16(file, peOffset + 6);
+		uint16_t sizeOfOptHdr = readU16(file, peOffset + 20);
+		uint32_t optHdrOffset = peOffset + 24;
+		uint16_t optMagic = readU16(file, optHdrOffset);
+
+		// Data directories begin at different offsets for PE32 vs PE32+
+		uint32_t dataDirBase = optHdrOffset + (optMagic == 0x020B ? 112 : 96);
+
+		// IMAGE_DIRECTORY_ENTRY_DEBUG is index 6
+		uint32_t debugDirRVA = readU32(file, dataDirBase + 6 * 8);
+		uint32_t debugDirSize = readU32(file, dataDirBase + 6 * 8 + 4);
+
+		if (debugDirRVA == 0 || debugDirSize == 0)
+		{
+			fclose(file); return false;
+		}
+
+		// Convert debug directory RVA to file offset via section headers
+		uint32_t sectionsBase = peOffset + 24 + sizeOfOptHdr;
+		uint32_t debugDirFileOff = 0;
+		for (uint16_t s = 0; s < numSections; ++s)
+		{
+			uint32_t sectBase = sectionsBase + (uint32_t)s * 40;
+			uint32_t sectVA = readU32(file, sectBase + 12);
+			uint32_t sectRawSize = readU32(file, sectBase + 16);
+			uint32_t sectRawOffset = readU32(file, sectBase + 20);
+
+			if (debugDirRVA >= sectVA && debugDirRVA < sectVA + sectRawSize)
+			{
+				debugDirFileOff = sectRawOffset + (debugDirRVA - sectVA);
+				break;
+			}
+		}
+
+		if (debugDirFileOff == 0)
+		{
+			fclose(file); return false;
+		}
+
+		// Walk IMAGE_DEBUG_DIRECTORY entries (28 bytes each); look for CodeView (Type == 2)
+		uint32_t numEntries = debugDirSize / 28;
+		for (uint32_t e = 0; e < numEntries; ++e)
+		{
+			uint32_t entryBase = debugDirFileOff + e * 28;
+			uint32_t type = readU32(file, entryBase + 12);
+
+			if (type != 2) // IMAGE_DEBUG_TYPE_CODEVIEW
+				continue;
+
+			uint32_t sizeOfData = readU32(file, entryBase + 16);
+			uint32_t ptrRawData = readU32(file, entryBase + 24);
+			if (ptrRawData == 0 || sizeOfData == 0)
+				continue;
+
+			uint32_t sig = readU32(file, ptrRawData);
+			if (sig != 0x53445352) // "RSDS" — PDB 7.0
+				continue;
+
+			// RSDS layout: signature(4) + GUID(16) + age(4) + pdb_path(variable, null-terminated UTF-8)
+			// Read GUID (16 bytes) - must be interpreted according to GUID structure
+			uint8_t guidBytes[16];
+			fseek(file, (long)(ptrRawData + 4), SEEK_SET);
+			if (fread(guidBytes, 1, 16, file) != 16)
+				continue;
+
+			// Read Age (4 bytes)
+			uint32_t age = readU32(file, ptrRawData + 20);
+
+			// Read PDB path
+			uint32_t pdbPathOffset = ptrRawData + 24;
+			uint32_t pdbPathMaxLen = sizeOfData - 24;
+			if (pdbPathMaxLen == 0 || pdbPathMaxLen > 4096)
+				continue;
+
+			char pdbPathUtf8[4096];
+			fseek(file, (long)pdbPathOffset, SEEK_SET);
+			size_t bytesRead = fread(pdbPathUtf8, 1, pdbPathMaxLen, file);
+			if (bytesRead == 0)
+				continue;
+
+			// Ensure null termination
+			pdbPathUtf8[bytesRead < sizeof(pdbPathUtf8) ? bytesRead : sizeof(pdbPathUtf8) - 1] = '\0';
+
+			if (rtm::strLen(pdbPathUtf8) == 0)
+				continue;
+
+			// Extract PDB filename from path
+			const char* pdbFileName = pdbPathUtf8;
+			size_t pathLen = rtm::strLen(pdbPathUtf8);
+			for (size_t i = pathLen; i > 0; --i)
+			{
+				if (pdbPathUtf8[i - 1] == '\\' || pdbPathUtf8[i - 1] == '/')
+				{
+					pdbFileName = &pdbPathUtf8[i];
+					break;
+				}
+			}
+
+			// Format GUID correctly for symbol server:
+			// GUID structure: Data1(4 bytes LE) + Data2(2 bytes LE) + Data3(2 bytes LE) + Data4(8 bytes BE)
+			// Symbol server format: Data1Data2Data3Data4 (uppercase hex, no dashes)
+			// The bytes must be reordered to match the GUID structure, not just read sequentially
+			char guidStr[33];
+			snprintf(guidStr, sizeof(guidStr),
+				"%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X",
+				// Data1 (4 bytes, reverse for little-endian)
+				guidBytes[3], guidBytes[2], guidBytes[1], guidBytes[0],
+				// Data2 (2 bytes, reverse for little-endian)
+				guidBytes[5], guidBytes[4],
+				// Data3 (2 bytes, reverse for little-endian)
+				guidBytes[7], guidBytes[6],
+				// Data4 (8 bytes, already in correct order/big-endian)
+				guidBytes[8], guidBytes[9], guidBytes[10], guidBytes[11],
+				guidBytes[12], guidBytes[13], guidBytes[14], guidBytes[15]);
+
+			// Format Age as uppercase hex (1 to 8 hex digits, typically)
+			char ageStr[9];
+			snprintf(ageStr, sizeof(ageStr), "%X", age);
+
+			// Build URL: server/pdbname/GUIDAGE/pdbname
+			// Ensure server doesn't end with '/'
+			char symbolServer[1024];
+			rtm::strlCpy(symbolServer, sizeof(symbolServer), _symbolServer);
+			size_t serverLen = rtm::strLen(symbolServer);
+			if (serverLen > 0 && symbolServer[serverLen - 1] == '/')
+				symbolServer[serverLen - 1] = '\0';
+
+			char urlBuffer[4096];
+			snprintf(urlBuffer, sizeof(urlBuffer), "%s/%s/%s%s/%s", symbolServer, pdbFileName, guidStr, ageStr, pdbFileName);
+
+			// Convert to wide string
+			size_t converted = mbstowcs(_outUrl, urlBuffer, _outSize - 1);
+			if (converted == (size_t)-1 || converted == 0)
+				continue;
+
+			_outUrl[converted] = L'\0';
 			fclose(file);
 			return true;
 		}
@@ -322,10 +503,13 @@ namespace rdebug {
 				++len;
 			}
 			wchar_t envBuffer[32 * 1024];
-			GetEnvironmentVariableW(L"_NT_SYMBOL_PATH", (LPWSTR)&envBuffer, (DWORD)(RTM_NUM_ELEMENTS(envBuffer)));
+
+			if (0 == GetEnvironmentVariableW(L"_NT_SYMBOL_PATH", (LPWSTR)envBuffer, (DWORD)(RTM_NUM_ELEMENTS(envBuffer))))
+				wcscpy(envBuffer, L"");
+
 			rtm::WideToMulti mbEnvBuffer(envBuffer);
 
-			rtm::strlCpy(&symStoreBuffer[len], 32 * 1024 - len, mbEnvBuffer);
+			rtm::strlCpy(&symStoreBuffer[len], uint32_t(32 * 1024) - uint32_t(len), mbEnvBuffer);
 		}
 
 		wchar_t outSymbolPath[32 * 1024];
@@ -379,7 +563,46 @@ namespace rdebug {
 				}
 			}
 
-			// Strategy 2: Fallback — try replacing the executable extension with .pdb
+			// Strategy 2: Try building a symbol server download URL
+			// Parse symbol server URLs from the store (typically starts with "srv*" or "cache*srv*")
+			const char* symbolServerUrl = nullptr;
+			if (rtm::strStr(symStoreBuffer, "http://") || rtm::strStr(symStoreBuffer, "https://"))
+			{
+				// Extract first http/https URL from symbol store string
+				const char* httpStart = rtm::strStr(symStoreBuffer, "http");
+				if (httpStart)
+				{
+					static char serverUrlBuffer[1024];
+					const char* httpEnd = httpStart;
+					while (*httpEnd && *httpEnd != ';' && *httpEnd != '*')
+						++httpEnd;
+					size_t urlLen = httpEnd - httpStart;
+					if (urlLen > 0 && urlLen < sizeof(serverUrlBuffer) - 1)
+					{
+						rtm::memCopy(serverUrlBuffer, sizeof(serverUrlBuffer), httpStart, urlLen);
+						serverUrlBuffer[urlLen] = '\0';
+						symbolServerUrl = serverUrlBuffer;
+					}
+				}
+			}
+
+			if (symbolServerUrl)
+			{
+				wchar_t pdbDownloadUrl[4096];
+				if (buildPdbDownloadUrl(moduleName, symbolServerUrl, pdbDownloadUrl, RTM_NUM_ELEMENTS(pdbDownloadUrl)))
+				{
+					// URL built successfully - this could be used for downloading
+					// For now, just log or store it; actual download would require HTTP client
+#if RTM_DEBUG
+					OutputDebugStringW(L"PDB download URL: ");
+					OutputDebugStringW(pdbDownloadUrl);
+					OutputDebugStringW(L"\n");
+#endif
+					// TODO: Implement HTTP download and retry loadDataForExe with downloaded PDB
+				}
+			}
+
+			// Strategy 3: Fallback — try replacing the executable extension with .pdb
 			size_t len = wcslen(moduleName);
 			if (len > 0)
 			{

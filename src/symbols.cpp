@@ -88,7 +88,7 @@ int hasRichHeader(char const* _filePath)
 
 // Returns 1 if the PE file contains a CodeView (PDB) debug directory entry, 0 otherwise.
 // Used as a fallback when no Rich Header is present to distinguish MSVC from GCC toolchains.
-int hasPDBDebugInfo(char const* _filePath)
+int hasPDBDebugInfo(char const* _filePath, std::string* _PDBpath = 0)
 {
 	FILE* file = fopen(_filePath, "rb");
 	if (!file)
@@ -156,17 +156,43 @@ int hasPDBDebugInfo(char const* _filePath)
 	for (uint32_t e = 0; e < numEntries; ++e)
 	{
 		uint32_t entryBase = debugDirFileOff + e * 28;
-		uint32_t type      = read32(file, entryBase + 12);
+		uint32_t type = read32(file, entryBase + 12);
 
 		if (type == 2) // IMAGE_DEBUG_TYPE_CODEVIEW
 		{
+			uint32_t sizeOfData = read32(file, entryBase + 16);
 			uint32_t ptrRawData = read32(file, entryBase + 24);
-			if (ptrRawData != 0)
+
+			if (ptrRawData != 0 && sizeOfData > 0)
 			{
 				uint32_t sig = read32(file, ptrRawData);
 				// "RSDS" (0x53445352) = PDB 7.0,  "NB10" (0x3031424E) = PDB 2.0
 				if (sig == 0x53445352 || sig == 0x3031424E)
+				{
+					if (_PDBpath)
+					{
+						// Skip signature (4 bytes) and GUID/timestamp based on format
+						uint32_t pathOffset = ptrRawData + (sig == 0x53445352 ? 24 : 16);
+
+						// Read null-terminated PDB path string
+						fseek(file, pathOffset, SEEK_SET);
+						char buffer[512];
+						uint32_t bytesRead = (uint32_t)fread(buffer, 1, sizeof(buffer) - 1, file);
+						buffer[bytesRead] = '\0';
+
+						// Ensure null termination within bounds
+						for (uint32_t i = 0; i < bytesRead; ++i)
+						{
+							if (buffer[i] == '\0')
+								break;
+							if (i == bytesRead - 1)
+								buffer[i] = '\0';
+						}
+
+						*_PDBpath = buffer;
+					}
 					RH_RET(1);
+				}
 			}
 		}
 	}
@@ -226,11 +252,20 @@ bool loadPDB(Module& _module)
 		wcscpy(symbolPath, L"");
 		const char* symStore = _module.m_resolver->m_symbolStore ? _module.m_resolver->m_symbolStore : (const char*)g_symStore;
 		findSymbol(_module.m_module.m_modulePath, symbolPath, symStore);
-			
+
 		if (wcscmp(symbolPath, L"") != 0)
-			_module.m_resolver->m_PDBFile->load(symbolPath);
-		else
-			return false;
+		{
+			if (_module.m_resolver->m_PDBFile->load(symbolPath))
+				return true;
+		}
+
+		std::string PDBpath;
+		if (hasPDBDebugInfo(_module.m_module.m_modulePath, &PDBpath))
+		{
+			rtm::MultiToWide widePDBpath(PDBpath.c_str());
+			if (_module.m_resolver->m_PDBFile->load(widePDBpath))
+				return true;
+		}
 	}
 	return _module.m_resolver->m_PDBFile->isLoaded();
 }
@@ -278,6 +313,7 @@ uintptr_t symbolResolverCreate(ModuleInfo* _moduleInfos, uint32_t _numInfos, con
 		if (!crossToolChain)
 		{
 #if RTM_PLATFORM_WINDOWS
+			// No Rich Header — use PDB/CodeView debug info as fallback before assuming GCC
 			int hasRH = hasRichHeader(module.m_module.m_modulePath);
 			if (hasRH >= 0)
 			{
