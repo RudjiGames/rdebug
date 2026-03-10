@@ -258,14 +258,6 @@ bool loadPDB(Module& _module)
 			if (_module.m_resolver->m_PDBFile->load(symbolPath))
 				return true;
 		}
-
-		std::string PDBpath;
-		if (hasPDBDebugInfo(_module.m_module.m_modulePath, &PDBpath))
-		{
-			rtm::MultiToWide widePDBpath(PDBpath.c_str());
-			if (_module.m_resolver->m_PDBFile->load(widePDBpath))
-				return true;
-		}
 	}
 	return _module.m_resolver->m_PDBFile->isLoaded();
 }

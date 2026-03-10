@@ -11,6 +11,8 @@
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#include <Wininet.h>  // Windows-specific header for internet functions
+#pragma comment (lib, "Wininet.lib")
 
 #if RTM_COMPILER_MSVC
 #pragma warning (disable: 4091) // 'typedef ': ignored on left of '' when no variable is declared
@@ -62,13 +64,65 @@ const GUID IID_IDiaLoadCallback = { 0xC32ADB82, 0x73F4, 0x421B, 0x95, 0xD5, 0xA4
 	UNDNAME_32_BIT_DECODE			| \
 	0)
 
+#if RTM_PLATFORM_WINDOWS
+
+struct FileDownloader
+{
+	HINTERNET hInternet = nullptr;
+	HINTERNET hConnect = nullptr;
+
+	FileDownloader()
+	{
+		hInternet = InternetOpenA("FileDownload", INTERNET_OPEN_TYPE_DIRECT, NULL, NULL, 0);
+		RTM_ASSERT(hInternet, "");
+	}
+
+	~FileDownloader()
+	{
+		if (hConnect)	InternetCloseHandle(hConnect);
+		if (hInternet)	InternetCloseHandle(hInternet);
+	}
+
+	bool downloadFile(const std::wstring& _url, const std::wstring& _destinationPath)
+	{
+		if (!hInternet)
+			return false;
+
+		hConnect = InternetOpenUrlW(hInternet, _url.c_str(), NULL, 0, INTERNET_FLAG_RELOAD, 0);
+		if (!hConnect)
+			return false;
+
+		// Generate a filename based on the URL
+		std::wstring outputFileName = L"temp.pdb"; // Default filename
+		size_t lastSlashPos = _url.find_last_of('/');
+		if (lastSlashPos != std::string::npos)
+			outputFileName = _url.substr(lastSlashPos + 1);
+
+		// Save the downloaded content to a file
+		FILE* f = fopen("tempomat.pdb", "wb");
+		if (!f)
+			return false;
+
+		// Read and save the content
+		char buffer[1024];
+		DWORD bytesRead;
+		while (InternetReadFile(hConnect, buffer, sizeof(buffer), &bytesRead) && bytesRead > 0) {
+			fwrite(buffer, 1, bytesRead, f);
+		}
+
+		fclose(f);
+		return true;
+	}
+};
+#endif
+
 namespace rdebug {
 
 	class DiaLoadCallBack : public IDiaLoadCallback2
 	{
 	private:
 		uint32_t	m_refCount;
-		wchar_t* m_buffer;
+		wchar_t*	m_buffer;
 
 	public:
 		DiaLoadCallBack(wchar_t* inBuffer) : m_refCount(0), m_buffer(inBuffer) {}
@@ -591,14 +645,20 @@ namespace rdebug {
 				wchar_t pdbDownloadUrl[4096];
 				if (buildPdbDownloadUrl(moduleName, symbolServerUrl, pdbDownloadUrl, RTM_NUM_ELEMENTS(pdbDownloadUrl)))
 				{
-					// URL built successfully - this could be used for downloading
-					// For now, just log or store it; actual download would require HTTP client
+					// URL built successfully - this will be used for downloading
 #if RTM_DEBUG
 					OutputDebugStringW(L"PDB download URL: ");
 					OutputDebugStringW(pdbDownloadUrl);
 					OutputDebugStringW(L"\n");
 #endif
-					// TODO: Implement HTTP download and retry loadDataForExe with downloaded PDB
+					//wchar_t tempPDBPath[8 * 1024];
+					//GetTempPathW(8 * 1024, tempPDBPath);
+					//wcscat(tempPDBPath, L"temp.pdb");
+					//
+					//FileDownloader downloader;
+					//downloader.downloadFile(pdbDownloadUrl, tempPDBPath);
+					//return true;
+					return false;
 				}
 			}
 
