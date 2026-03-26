@@ -4,24 +4,7 @@
 --
 
 function projectDependencies_rdebug()
-	return { "rbase" }
-end
-
-function projectExtraConfigExecutable_rdebug()
-	if getTargetOS() == "windows" then
-		local DIAProjectPath = projectGetPath("DIA")
-		local DIApath = path.join(DIAProjectPath, "../");
-
-		configuration {"windows", "x32", "not gmake" }
-			includedirs { DIApath }
-			libdirs { DIAProjectPath .. "/lib/x32/" }
-			links {"diaguids"}
-		configuration {"windows", "x64", "not gmake" }
-			includedirs { DIApath }
-			libdirs { DIAProjectPath .. "/lib/x64/" }
-			links {"diaguids"}
-		configuration {}
-	end
+	return { "rbase", "DIA" }
 end
 
 function projectExtraConfig_rdebug()
@@ -32,6 +15,11 @@ function projectExtraConfig_rdebug()
 	configuration { "linux-*" }
 		buildoptions { "-Wimplicit-fallthrough=0" }
 	configuration {}
+	includedirs	{ path.join(projectGetPath("rdebug"), "../") }
+end
+
+function projectExtraConfigExecutable_rdebug() 
+	includedirs	{ path.join(projectGetPath("rdebug"), "../") }
 end
 
 function projectAdd_rdebug()
