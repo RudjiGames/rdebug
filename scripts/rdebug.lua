@@ -11,8 +11,8 @@ DIAErrorPrinted = false
 
 function projectExtraConfigExecutable_rdebug()
 	if getTargetOS() == "windows" then
-		local DIApath = getProjectPath("DIA", ProjectPath.Root);
-		if DIApath == nil then
+		local DIAProjectPath = projectGetPath("DIA")
+		if DIAProjectPath == nil then
 			if DIAErrorPrinted == false then
 				print("DIA dependency is missing, please clone from https://github.com/RudjiGames/DIA!")
 			end
@@ -20,13 +20,15 @@ function projectExtraConfigExecutable_rdebug()
 			return
 		end
 
+		local DIApath = path.join(DIAProjectPath, "../");
+
 		configuration {"windows", "x32", "not gmake" }
-			includedirs { getProjectPath("DIA", ProjectPath.Root) }
-			libdirs { getProjectPath("DIA", ProjectPath.Dir) .. "/lib/x32/" }
+			includedirs { DIApath }
+			libdirs { DIAProjectPath .. "/lib/x32/" }
 			links {"diaguids"}
 		configuration {"windows", "x64", "not gmake" }
-			includedirs { getProjectPath("DIA", ProjectPath.Root) }
-			libdirs { getProjectPath("DIA", ProjectPath.Dir) .. "/lib/x64/" }
+			includedirs { DIApath }
+			libdirs { DIAProjectPath .. "/lib/x64/" }
 			links {"diaguids"}
 		configuration {}
 	end
@@ -43,6 +45,6 @@ function projectExtraConfig_rdebug()
 end
 
 function projectAdd_rdebug()
-	addProject_lib("rdebug", Lib.Tool)
+	addProject_lib("rdebug", LibraryType.Tool)
 end
 
