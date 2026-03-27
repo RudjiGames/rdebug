@@ -18,5 +18,5 @@ dofile(_OPTIONS["zidar-path"] .. "/zidar.lua")
 dofile("rdebug.lua")
 
 solution("rdebug")
-setPlatforms()
-addLibProjects("rdebug")
+	setPlatforms()
+	addLibProjects("rdebug")

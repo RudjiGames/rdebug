@@ -85,6 +85,7 @@ struct FileDownloader
 
 	bool downloadFile(const std::wstring& _url, const std::wstring& _destinationPath)
 	{
+		(void)_destinationPath;
 		if (!hInternet)
 			return false;
 
@@ -304,7 +305,7 @@ namespace rdebug {
 				continue;
 
 			// Read Age (4 bytes)
-			uint32_t age = readU32(file, ptrRawData + 20);
+			uint32_t age = readU32(file, ptrRawData + 20); (void)age;
 
 			// Read PDB path
 			uint32_t pdbPathOffset = ptrRawData + 24;

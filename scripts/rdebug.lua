@@ -16,10 +16,12 @@ function projectExtraConfig_rdebug()
 		buildoptions { "-Wimplicit-fallthrough=0" }
 	configuration {}
 	includedirs	{ path.join(projectGetPath("rdebug"), "../") }
+	includedirs	{ path.join(projectGetPath("DIA"), "../") }
 end
 
 function projectExtraConfigExecutable_rdebug() 
 	includedirs	{ path.join(projectGetPath("rdebug"), "../") }
+	includedirs	{ path.join(projectGetPath("DIA"), "../") }
 end
 
 function projectAdd_rdebug()
