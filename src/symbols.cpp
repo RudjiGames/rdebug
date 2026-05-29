@@ -256,8 +256,14 @@ bool loadPDB(Module& _module)
 		if (wcscmp(symbolPath, L"") != 0)
 		{
 			if (_module.m_resolver->m_PDBFile->load(symbolPath))
+			{
+				rtm::WideToMulti pdbPath(symbolPath);
+				rtm::Console::info("Symbols: loaded for '%s' from '%s'\n", _module.m_moduleName, pdbPath.m_ptr);
 				return true;
+			}
 		}
+
+		rtm::Console::warning("Symbols: NOT resolved for '%s' (binary: '%s')\n", _module.m_moduleName, _module.m_module.m_modulePath);
 	}
 	return _module.m_resolver->m_PDBFile->isLoaded();
 }
@@ -280,6 +286,11 @@ uintptr_t symbolResolverCreate(ModuleInfo* _moduleInfos, uint32_t _numInfos, con
 	RTM_ASSERT(_moduleInfos, "Either module info array or toolchain desc can't be NULL");
 
 	Resolver* resolver = rtm_new<Resolver>();
+
+	// A suspiciously small module count here usually means the capture's module list
+	// was truncated at record time (see rmem writeModuleInfo) - frames in the missing
+	// modules can never be resolved.
+	rtm::Console::info("Symbol resolver: processing %u modules\n", _numInfos);
 
 	for (uint32_t i=0; i<_numInfos; ++i)
 	{
@@ -703,6 +714,11 @@ void symbolResolverGetFrame(uintptr_t _resolver, uint64_t _address, StackFrame* 
 	const Module* module = addressGetModule(_resolver, _address);
 	if (!module)
 		return;
+
+	// The address maps to a known module - always show that module's name, even when
+	// the function/file can't be resolved, so the tree shows e.g. "kernel32.dll"
+	// instead of just the raw address.
+	rtm::strlCpy(_frame->m_moduleName, RTM_NUM_ELEMENTS(_frame->m_moduleName), rtm::pathGetFileName(module->m_module.m_modulePath));
 
 #if RTM_PLATFORM_WINDOWS
 	if (module->m_resolver->m_PDBFile && module->m_resolver->m_PDBFile->isLoaded())
