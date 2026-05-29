@@ -428,7 +428,7 @@ uintptr_t symbolResolverCreate(ModuleInfo* _moduleInfos, uint32_t _numInfos, con
 		resolver->m_modules.push_back(module);
 	}
 
-	std::sort(resolver->m_modules.begin(), resolver->m_modules.end(),
+	std::sort(resolver->m_modules.m_data, resolver->m_modules.m_data + resolver->m_modules.size(),
 		[](const Module& a, const Module& b)
 		{
 			return a.m_module.m_baseAddress < b.m_module.m_baseAddress;
