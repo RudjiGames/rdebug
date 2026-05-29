@@ -280,6 +280,34 @@ void symbolSetServerSource(const char* _symStore)
 	rtm::strlCpy(g_symStore, ResolveInfo::SYM_SERVER_BUFFER_SIZE, _symStore);
 }
 
+// Reads the preferred image base from a PE binary's optional header (0 on failure).
+// Needed to undo ASLR for addr2line: addr2line wants imageBase + RVA, but the captured
+// address is loadBase + RVA, and with ASLR loadBase != imageBase.
+static uint64_t getPEImageBase(const char* _filePath)
+{
+	FILE* file = fopen(_filePath, "rb");
+	if (!file)
+		return 0;
+
+	uint64_t imageBase = 0;
+	if (read16(file, 0) == 0x5A4D)						// "MZ"
+	{
+		uint32_t peOff = read32(file, 0x3C);
+		if (read32(file, peOff) == 0x00004550)			// "PE\0\0"
+		{
+			const uint32_t optHdr = peOff + 24;			// skip PE sig (4) + COFF header (20)
+			uint16_t magic = read16(file, optHdr);
+			if (magic == 0x20B)							// PE32+  (ImageBase: 8 bytes @ optHdr+24)
+				imageBase = (uint64_t)read32(file, optHdr + 24) | ((uint64_t)read32(file, optHdr + 28) << 32);
+			else if (magic == 0x10B)					// PE32   (ImageBase: 4 bytes @ optHdr+28)
+				imageBase = read32(file, optHdr + 28);
+		}
+	}
+
+	fclose(file);
+	return imageBase;
+}
+
 uintptr_t symbolResolverCreate(ModuleInfo* _moduleInfos, uint32_t _numInfos, const char* _executable, module_load_cb _callback, void* _data)
 {
 	RTM_UNUSED_3(_callback, _data, _executable);
@@ -335,10 +363,25 @@ uintptr_t symbolResolverCreate(ModuleInfo* _moduleInfos, uint32_t _numInfos, con
 		// module frames resolve too (previously every module used the main executable).
 		const char* moduleBinary = module.m_module.m_modulePath;
 
-		// For relocated/PIE binaries (ELF/SELF/PS) addr2line expects an RVA, so subtract
-		// this module's own load base. Windows PE keeps base 0 (absolute addresses).
-		if (crossToolChain)
-			module.m_resolver->m_baseAddress4addr2Line = module.m_module.m_baseAddress;
+		// addr2line wants the address as it appears in the binary on disk:
+		//  - ELF/SELF/PS (PIE, preferred base 0): that's the RVA -> subtract the load base.
+		//  - Windows PE (MinGW/GCC): preferredImageBase + RVA. With ASLR (default in recent
+		//    MinGW/MSYS2) the runtime load base differs from the on-disk image base, so undo
+		//    the relocation by subtracting (loadBase - imageBase). Without this, ASLR'd builds
+		//    resolve every frame to Unknown.
+		if (module.m_module.m_toolchain.m_type != rdebug::Toolchain::MSVC)
+		{
+			if (crossToolChain)
+			{
+				module.m_resolver->m_baseAddress4addr2Line = module.m_module.m_baseAddress;
+			}
+			else
+			{
+				const uint64_t imageBase = getPEImageBase(module.m_module.m_modulePath);
+				if (imageBase)
+					module.m_resolver->m_baseAddress4addr2Line = module.m_module.m_baseAddress - imageBase;
+			}
+		}
 
 		if (moduleBinary && moduleBinary[0])
 		{
@@ -365,7 +408,7 @@ uintptr_t symbolResolverCreate(ModuleInfo* _moduleInfos, uint32_t _numInfos, con
 
 			append_a2l = "\" -f -e " + quote;
 			append_a2l += moduleBinary;
-			append_a2l += quote + " 0x%x";
+			append_a2l += quote + " 0x%llx";	// 64-bit: %x truncated 64-bit (e.g. mingw64) addresses
 
 			append_cppf = "\" -t -n ";
 		}
@@ -376,7 +419,7 @@ uintptr_t symbolResolverCreate(ModuleInfo* _moduleInfos, uint32_t _numInfos, con
 			append_nm += moduleBinary;
 			append_nm += "\"";
 
-			append_a2l = "\" -a2l 0x%x -i \"";
+			append_a2l = "\" -a2l 0x%llx -i \"";
 			append_a2l += moduleBinary;
 			append_a2l += "\"";
 
@@ -827,8 +870,11 @@ uint64_t symbolResolverGetAddressID(uintptr_t _resolver, uint64_t _address)
 		}
 	}
 
-	rdebug::Symbol sym;;
-	if (module->m_resolver->m_symbolMap.findSymbol(_address, sym))
+	// Look up using the on-disk address (undo ASLR / load-base) so it matches the symbol
+	// values nm reported - same correction addr2line uses in symbolResolverGetFrame.
+	rdebug::Symbol sym;
+	const uint64_t symAddress = _address - module->m_resolver->m_baseAddress4addr2Line;
+	if (module->m_resolver->m_symbolMap.findSymbol(symAddress, sym))
 		return (uint64_t)rtm::hashStr(sym.m_name.c_str());
 	else
 		return _address;
