@@ -549,6 +549,23 @@ namespace rdebug {
 			rtm::strlCat(symStoreBuffer, 32 * 1024, _symbolStore);
 		}
 
+		// Also search the directory the module's binary lives in, so a PDB sitting
+		// next to the binary is found even when the symbol store doesn't list it.
+		if (_path && (rtm::strLen(_path) > 0))
+		{
+			char moduleDir[1024];
+			rtm::strlCpy(moduleDir, RTM_NUM_ELEMENTS(moduleDir), _path);
+			char* fileName = (char*)rtm::pathGetFileName(moduleDir);
+			if (fileName && (fileName > moduleDir))
+			{
+				fileName[-1] = '\0';	// strip file name, keep the directory
+				size_t sl = rtm::strLen(symStoreBuffer);
+				if (sl > 0 && symStoreBuffer[sl - 1] != ';')
+					rtm::strlCat(symStoreBuffer, 32 * 1024, ";");
+				rtm::strlCat(symStoreBuffer, 32 * 1024, moduleDir);
+			}
+		}
+
 		{
 			size_t len = rtm::strLen(symStoreBuffer);
 			if (len > 0 && (len + 1) < (32 * 1024) && symStoreBuffer[len - 1] != ';')

@@ -276,13 +276,10 @@ void symbolSetServerSource(const char* _symStore)
 
 uintptr_t symbolResolverCreate(ModuleInfo* _moduleInfos, uint32_t _numInfos, const char* _executable, module_load_cb _callback, void* _data)
 {
-	RTM_UNUSED_2(_callback, _data);
+	RTM_UNUSED_3(_callback, _data, _executable);
 	RTM_ASSERT(_moduleInfos, "Either module info array or toolchain desc can't be NULL");
 
 	Resolver* resolver = rtm_new<Resolver>();
-
-	const char* executablePath = 0;
-	const char* exeName = _executable ? rtm::pathGetFileName(_executable) : 0;
 
 	for (uint32_t i=0; i<_numInfos; ++i)
 	{
@@ -323,18 +320,18 @@ uintptr_t symbolResolverCreate(ModuleInfo* _moduleInfos, uint32_t _numInfos, con
 #endif // RTM_PLATFORM_WINDOWS
 		}
 
-		if (ext)
-		{
-			if ((rtm::striCmp(ext, "EXE") == 0) || crossToolChain)
-				executablePath = _moduleInfos[i].m_modulePath;
+		// Resolve each module against its OWN binary so shared-library / secondary
+		// module frames resolve too (previously every module used the main executable).
+		const char* moduleBinary = module.m_module.m_modulePath;
 
-			if (((rtm::striCmp(module.m_moduleName, exeName) == 0)) && crossToolChain)
-				module.m_resolver->m_baseAddress4addr2Line = module.m_module.m_baseAddress;
-		}
+		// For relocated/PIE binaries (ELF/SELF/PS) addr2line expects an RVA, so subtract
+		// this module's own load base. Windows PE keeps base 0 (absolute addresses).
+		if (crossToolChain)
+			module.m_resolver->m_baseAddress4addr2Line = module.m_module.m_baseAddress;
 
-		if (executablePath)
+		if (moduleBinary && moduleBinary[0])
 		{
-			module.m_resolver->m_executablePath = module.m_resolver->scratch(executablePath);
+			module.m_resolver->m_executablePath = module.m_resolver->scratch(moduleBinary);
 			module.m_resolver->m_executableName = module.m_resolver->m_executablePath ? rtm::pathGetFileName(module.m_resolver->m_executablePath) : 0;
 		}
 
@@ -352,11 +349,11 @@ uintptr_t symbolResolverCreate(ModuleInfo* _moduleInfos, uint32_t _numInfos, con
 				quote = "\"";
 
 			append_nm = "\" -C --print-size --numeric-sort --line-numbers " + quote;
-			append_nm += executablePath;
+			append_nm += moduleBinary;
 			append_nm += quote;
 
 			append_a2l = "\" -f -e " + quote;
-			append_a2l += executablePath;
+			append_a2l += moduleBinary;
 			append_a2l += quote + " 0x%x";
 
 			append_cppf = "\" -t -n ";
@@ -365,11 +362,11 @@ uintptr_t symbolResolverCreate(ModuleInfo* _moduleInfos, uint32_t _numInfos, con
 		if (module.m_module.m_toolchain.m_type == rdebug::Toolchain::PS3SNC)
 		{
 			append_nm = "\" -dsy \"";
-			append_nm += executablePath;
+			append_nm += moduleBinary;
 			append_nm += "\"";
 
 			append_a2l = "\" -a2l 0x%x -i \"";
-			append_a2l += executablePath;
+			append_a2l += moduleBinary;
 			append_a2l += "\"";
 
 			append_cppf = "\" -t -n ";
