@@ -428,10 +428,10 @@ uintptr_t symbolResolverCreate(ModuleInfo* _moduleInfos, uint32_t _numInfos, con
 		resolver->m_modules.push_back(module);
 	}
 
-	std::sort(&resolver->m_modules[0], &resolver->m_modules[resolver->m_modules.size()-1],
+	std::sort(resolver->m_modules.begin(), resolver->m_modules.end(),
 		[](const Module& a, const Module& b)
-		{ 
-			return a.m_module.m_baseAddress < b.m_module.m_baseAddress; 
+		{
+			return a.m_module.m_baseAddress < b.m_module.m_baseAddress;
 		});
 
 	return (uintptr_t)resolver;
@@ -453,7 +453,7 @@ uintptr_t symbolResolverCreateForCurrentProcess()
 
 #if RTM_COMPILER_MSVC
 	wchar_t symStoreBuffer[4096];
-	if (0 == GetEnvironmentVariableW(L"_NT_SYMBOL_PATH", (LPWSTR)symStoreBuffer, sizeof(symStoreBuffer)))
+	if (0 == GetEnvironmentVariableW(L"_NT_SYMBOL_PATH", (LPWSTR)symStoreBuffer, RTM_NUM_ELEMENTS(symStoreBuffer)))
 		wcscpy(symStoreBuffer, L"");
 	rtm::WideToMulti symStore(symStoreBuffer);
 
@@ -681,9 +681,14 @@ struct StringData
 void rustDemangleCallback(const char* data, size_t len, void* opaque)
 {
 	StringData* str = (StringData*)opaque;
-	rtm::memCopy(&str->m_data[str->m_length], StringData::STRING_DATA_SIZE - str->m_length, data, len);
-	str->m_length += (uint32_t)len;
-	RTM_ASSERT(str->m_length < StringData::STRING_DATA_SIZE, "StringData buffer overflow in rustDemangleCallback!");
+	// Clamp to the space remaining so a very long mangled name can never write
+	// past m_data (the buffer must also keep room for the null terminator).
+	const uint32_t space = (str->m_length < StringData::STRING_DATA_SIZE)
+							? (uint32_t)(StringData::STRING_DATA_SIZE - 1 - str->m_length)
+							: 0;
+	uint32_t toCopy = (len < space) ? (uint32_t)len : space;
+	rtm::memCopy(&str->m_data[str->m_length], space, data, toCopy);
+	str->m_length += toCopy;
 	str->m_data[str->m_length] = '\0';
 }
 

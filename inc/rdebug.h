@@ -44,14 +44,16 @@ namespace rdebug {
 
 		inline bool checkAddress(uint64_t _address) const
 		{
-			return (_address - m_baseAddress <= m_size);
+			// Module occupies [m_baseAddress, m_baseAddress + m_size); the first
+			// byte past the end belongs to the next module, so use '<' not '<='.
+			return (_address - m_baseAddress < m_size);
 		}
 
 		inline bool checkAddressAndTime(uint64_t _address, uint64_t _operationTime) const
 		{
 			return ((_operationTime >= m_loadTime)		&&
 					(_operationTime <= m_unloadTime)	&&
-					(_address - m_baseAddress <= m_size));
+					(_address - m_baseAddress < m_size));
 		}
 	};
 

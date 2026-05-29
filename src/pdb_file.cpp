@@ -294,7 +294,7 @@ namespace rdebug {
 				continue;
 
 			uint32_t sig = readU32(file, ptrRawData);
-			if (sig != 0x53445352) // "RSDS" — PDB 7.0
+			if (sig != 0x53445352) // "RSDS" ï¿½ PDB 7.0
 				continue;
 
 			// RSDS layout: signature(4) + GUID(16) + age(4) + pdb_path(variable, null-terminated UTF-8)
@@ -421,7 +421,7 @@ namespace rdebug {
 				continue;
 
 			uint32_t sig = readU32(file, ptrRawData);
-			if (sig != 0x53445352) // "RSDS" — PDB 7.0
+			if (sig != 0x53445352) // "RSDS" ï¿½ PDB 7.0
 				continue;
 
 			// RSDS layout: signature(4) + GUID(16) + age(4) + pdb_path(variable, null-terminated UTF-8)
@@ -551,7 +551,7 @@ namespace rdebug {
 
 		{
 			size_t len = rtm::strLen(symStoreBuffer);
-			if (len > 0 && symStoreBuffer[len - 1] != ';')
+			if (len > 0 && (len + 1) < (32 * 1024) && symStoreBuffer[len - 1] != ';')
 			{
 				symStoreBuffer[len] = ';';
 				symStoreBuffer[len + 1] = '\0';
@@ -663,7 +663,7 @@ namespace rdebug {
 				}
 			}
 
-			// Strategy 3: Fallback — try replacing the executable extension with .pdb
+			// Strategy 3: Fallback ï¿½ try replacing the executable extension with .pdb
 			size_t len = wcslen(moduleName);
 			if (len > 0)
 			{

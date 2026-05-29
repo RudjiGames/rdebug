@@ -38,6 +38,12 @@ namespace rdebug {
 	{
 		size_t len = rtm::strLen(_str);
 
+		// Need at least the function line plus its terminator before &_str[l+2]
+		// is valid; bail on empty/short input to avoid size_t underflow in the
+		// loop below and an out-of-bounds read of 'ptr'.
+		if (len < 2)
+			return;
+
 		size_t l = len;
 		int idx = 0;
 		while (--l)
