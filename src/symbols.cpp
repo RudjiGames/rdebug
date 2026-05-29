@@ -13,13 +13,9 @@
 #include "../3rd/rust-demangle.c"
 
 #include <algorithm>
-
-#if RTM_PLATFORM_WINDOWS
-#define WIN32_LEAN_AND_MEAN
-#include <windows.h>
-#include <TlHelp32.h>
-#include <Psapi.h>
-#include <DIA/include/dia2.h>
+#include <thread>
+#include <atomic>
+#include <vector>
 
 inline static uint16_t read16(FILE* _file, uint32_t _pos)
 {
@@ -36,6 +32,13 @@ inline static uint32_t read32(FILE* _file, uint32_t _pos)
 	fread(buf, 1, 4, _file);
 	return (uint32_t)buf[0] | (uint32_t)buf[1] << 8 | (uint32_t)buf[2] << 16 | (uint32_t)buf[3] << 24;
 }
+
+#if RTM_PLATFORM_WINDOWS
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#include <TlHelp32.h>
+#include <Psapi.h>
+#include <DIA/include/dia2.h>
 
 #define RH_RET(_x) { fclose(file); return _x; }
 
@@ -308,6 +311,31 @@ static uint64_t getPEImageBase(const char* _filePath)
 	return imageBase;
 }
 
+// Builds a module's symbol map from its toolchain 'nm' output. Safe to call concurrently for
+// different resolvers (each owns its own map). The m_symbolMapInitialized guard makes it a
+// no-op if the map is already built, so the lazy fallback path stays correct and idempotent.
+static void initSymbolMap(ResolveInfo* _r)
+{
+	if (!_r || _r->m_symbolMapInitialized)
+		return;
+
+	if (!_r->m_tc_nm || (rtm::strLen(_r->m_tc_nm) == 0) || !_r->m_parseSymMap)
+		return;
+
+	char cmdline[4096 * 2];
+	rtm::strlCpy(cmdline, RTM_NUM_ELEMENTS(cmdline), _r->m_tc_nm);
+
+	const char* procOut = processGetOutputOf(cmdline, true);
+	if (procOut)
+	{
+		if (!rtm::strStr(procOut, "No such file"))
+			_r->m_parseSymMap(procOut, _r->m_symbolMap);
+		_r->m_symbolMapInitialized = true;
+
+		processReleaseOutput(procOut);
+	}
+}
+
 uintptr_t symbolResolverCreate(ModuleInfo* _moduleInfos, uint32_t _numInfos, const char* _executable, module_load_cb _callback, void* _data)
 {
 	RTM_UNUSED_3(_callback, _data, _executable);
@@ -484,6 +512,45 @@ uintptr_t symbolResolverCreate(ModuleInfo* _moduleInfos, uint32_t _numInfos, con
 		{
 			return a.m_module.m_baseAddress < b.m_module.m_baseAddress;
 		});
+
+#if RTM_PLATFORM_WINDOWS
+	// Pre-extract per-module 'nm' symbol maps up front and in parallel instead of paying each
+	// nm sub-process serially on first lookup during analysis. nm resolution only has a real
+	// implementation on a Windows host (cross-toolchain GCC/PS captures), and each module owns
+	// its own resolver/map, so the work is embarrassingly parallel with no shared state.
+	{
+		const uint32_t moduleCount = resolver->m_modules.size();
+		if (moduleCount > 1)
+		{
+			uint32_t hw = std::thread::hardware_concurrency();
+			if (hw == 0)
+				hw = 4;
+			const uint32_t threadCount = (moduleCount < hw) ? moduleCount : hw;
+
+			std::atomic<uint32_t> nextModule(0);
+			auto worker = [&]()
+			{
+				for (;;)
+				{
+					const uint32_t i = nextModule.fetch_add(1);
+					if (i >= moduleCount)
+						break;
+					initSymbolMap(resolver->m_modules[i].m_resolver);
+				}
+			};
+
+			std::vector<std::thread> pool;
+			pool.reserve(threadCount - 1);
+			for (uint32_t t=1; t<threadCount; ++t)
+				pool.emplace_back(worker);
+			worker();						// also do work on the calling thread
+			for (size_t t=0; t<pool.size(); ++t)
+				pool[t].join();
+		}
+		else if (moduleCount == 1)
+			initSymbolMap(resolver->m_modules[0].m_resolver);
+	}
+#endif // RTM_PLATFORM_WINDOWS
 
 	return (uintptr_t)resolver;
 }
@@ -853,22 +920,9 @@ uint64_t symbolResolverGetAddressID(uintptr_t _resolver, uint64_t _address)
 	}
 #endif // RTM_PLATFORM_WINDOWS
 
-	if (module->m_resolver->m_tc_nm && (rtm::strLen(module->m_resolver->m_tc_nm) != 0) && (!module->m_resolver->m_symbolMapInitialized))
-	{
-		char cmdline[4096 * 2];
-		rtm::strlCpy(cmdline, RTM_NUM_ELEMENTS(cmdline), module->m_resolver->m_tc_nm);
-
-		const char* procOut = processGetOutputOf(cmdline, true);
-
-		if (procOut)
-		{
-			if (!rtm::strStr(procOut, "No such file"))
-				module->m_resolver->m_parseSymMap(procOut, module->m_resolver->m_symbolMap);
-			module->m_resolver->m_symbolMapInitialized = true;
-
-			processReleaseOutput(procOut);
-		}
-	}
+	// Lazy fallback: normally the map was pre-extracted (in parallel) at resolver creation,
+	// but build it on demand if not (idempotent thanks to the m_symbolMapInitialized guard).
+	initSymbolMap(module->m_resolver);
 
 	// Look up using the on-disk address (undo ASLR / load-base) so it matches the symbol
 	// values nm reported - same correction addr2line uses in symbolResolverGetFrame.
