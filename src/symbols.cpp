@@ -656,7 +656,12 @@ uintptr_t symbolResolverCreateForCurrentProcess()
 
 		    if (gFn_enumProcessModules(GetCurrentProcess(), hMods, sizeof(hMods), &cbNeeded))
 			{
-				for (uint32_t i=0; i<(cbNeeded/sizeof(HMODULE)); ++i)
+				// EnumProcessModules reports the TOTAL bytes needed, which can exceed our buffer;
+				// clamp so we never read past hMods, and never push past the modules array.
+				uint32_t modCount = (uint32_t)(cbNeeded / sizeof(HMODULE));
+				if (modCount > RTM_NUM_ELEMENTS(hMods))
+					modCount = RTM_NUM_ELEMENTS(hMods);
+				for (uint32_t i=0; i<modCount && modules.size()<Resolver::MAX_MODULES; ++i)
 				{
 					wchar_t szModName[MAX_PATH];
 
@@ -679,7 +684,7 @@ uintptr_t symbolResolverCreateForCurrentProcess()
 			}
 		}
 		else
-		while (cap)
+		while (cap && (modules.size() < Resolver::MAX_MODULES))	// FixedArray push_back is unchecked in release
 		{
 			rtm::WideToMulti exePath(me.szExePath);
 

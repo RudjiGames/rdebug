@@ -237,22 +237,25 @@ BOOL createChildProcess(const char* _cmdLine, PipeHandles* _handles, bool _redir
 		for (;;)
 		{
 			bool stillRunning = (WaitForSingleObject(piProcInfo.hProcess,0) == WAIT_TIMEOUT);
-			
-			DWORD dwRead = 0;
+
 			DWORD bytesAvailable = 0;
 			PeekNamedPipe(_handles->m_stdOut_Read, NULL, 0, NULL, &bytesAvailable, NULL);
-			bSuccess = bytesAvailable && (ReadFile(_handles->m_stdOut_Read, &buffer[0], g_bufferSize, &dwRead, NULL) == TRUE);
 
-			if (bSuccess)
+			if (bytesAvailable)
 			{
-				buffer[dwRead] = '\0';
-				_buffer += buffer.c_str();
+				DWORD dwRead = 0;
+				if (ReadFile(_handles->m_stdOut_Read, &buffer[0], g_bufferSize, &dwRead, NULL) && dwRead)
+				{
+					buffer[dwRead] = '\0';
+					_buffer += buffer.c_str();
+				}
+				continue;	// keep draining while data is available - including after the child has exited
 			}
-			else if (stillRunning)
-				Sleep(1);	// nothing to read yet; yield instead of spinning a CPU core
 
 			if (!stillRunning)
-				break;
+				break;		// child has exited and the pipe is fully drained
+
+			Sleep(1);		// running but nothing buffered yet; yield instead of spinning a CPU core
 		}
 
 		WaitForMultipleObjects(2,h,TRUE,999);
