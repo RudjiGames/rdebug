@@ -699,10 +699,12 @@ namespace rdebug {
 		ensureDirExists(parentDir);
 
 		// Download to a sidecar file, validate the PDB (MSF) magic, then move into place so a
-		// partial/failed download is never cached.
+		// partial/failed download is never cached. The sidecar name carries the thread id so that
+		// concurrent prefetch of the same PDB (parallel symbol resolution) doesn't have two threads
+		// writing the same temp file and corrupting each other's download.
 		wchar_t tmpPath[8 * 1024];
-		wcscpy(tmpPath, cachePdbPath);
-		wcscat(tmpPath, L".download");
+		_snwprintf(tmpPath, RTM_NUM_ELEMENTS(tmpPath), L"%s.%u.download", cachePdbPath, (unsigned)GetCurrentThreadId());
+		tmpPath[RTM_NUM_ELEMENTS(tmpPath) - 1] = L'\0';
 		DeleteFileW(tmpPath);
 
 		bool ok = false;
