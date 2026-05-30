@@ -82,9 +82,12 @@ bool processInjectDLL(const char* _executablePath, const char* _DLLPath, const c
     startInfo.cb = sizeof(STARTUPINFOW);
 
 	wchar_t cmdLine[32768];
-	wcscpy(cmdLine, rtm::MultiToWide(_executablePath));
-	wcscat(cmdLine, L" ");
-	wcscat(cmdLine, rtm::MultiToWide(_cmdLine, false));
+	rtm::MultiToWide exeW(_executablePath);
+	rtm::MultiToWide argW(_cmdLine, false);
+	// Bounded build: CreateProcessW's command line is capped at 32767 wchars anyway, and the
+	// unbounded wcscpy/wcscat could overflow on very long exe path + args.
+	_snwprintf(cmdLine, RTM_NUM_ELEMENTS(cmdLine), L"%s %s", (const wchar_t*)exeW, (const wchar_t*)argW);
+	cmdLine[RTM_NUM_ELEMENTS(cmdLine) - 1] = L'\0';
 
 	if (CreateProcessW(0, cmdLine, NULL, NULL, FALSE, CREATE_SUSPENDED, NULL, rtm::MultiToWide(_workingDir), &startInfo, &pInfo) != TRUE)
 		return false;
@@ -245,7 +248,9 @@ BOOL createChildProcess(const char* _cmdLine, PipeHandles* _handles, bool _redir
 				buffer[dwRead] = '\0';
 				_buffer += buffer.c_str();
 			}
-			
+			else if (stillRunning)
+				Sleep(1);	// nothing to read yet; yield instead of spinning a CPU core
+
 			if (!stillRunning)
 				break;
 		}

@@ -19,17 +19,21 @@
 
 inline static uint16_t read16(FILE* _file, uint32_t _pos)
 {
-	fseek(_file, (long)_pos, SEEK_SET);
+	if (fseek(_file, (long)_pos, SEEK_SET) != 0)
+		return 0;
 	uint8_t buf[2];
-	fread(buf, 1, 2, _file);
+	if (fread(buf, 1, 2, _file) != 2)	// short/failed read -> 0 instead of using uninitialized bytes
+		return 0;
 	return (uint16_t)((uint32_t)buf[0] | (uint32_t)buf[1] << 8);
 }
 
 inline static uint32_t read32(FILE* _file, uint32_t _pos)
 {
-	fseek(_file, (long)_pos, SEEK_SET);
+	if (fseek(_file, (long)_pos, SEEK_SET) != 0)
+		return 0;
 	uint8_t buf[4];
-	fread(buf, 1, 4, _file);
+	if (fread(buf, 1, 4, _file) != 4)	// short/failed read -> 0 instead of using uninitialized bytes
+		return 0;
 	return (uint32_t)buf[0] | (uint32_t)buf[1] << 8 | (uint32_t)buf[2] << 16 | (uint32_t)buf[3] << 24;
 }
 
@@ -72,8 +76,9 @@ int hasRichHeader(char const* _filePath)
 	if (relOffset % 16)
 		relOffset += 16 - (relOffset % 16);
 
-	uint16_t roffset = 0;
-	for (uint16_t i = relOffset; i < peOffset; i += 4)
+	uint32_t roffset = 0;	// only tested for non-zero ("Rich" tag found)
+	// 32-bit counter: a uint16_t would wrap past 0xFFFF on a crafted/garbage peOffset and loop forever.
+	for (uint32_t i = relOffset; i < peOffset; i += 4)
 	{
 		t = read32(file, i);
 		if (t == 0x68636952)
@@ -251,8 +256,8 @@ bool loadPDB(Module& _module)
 	if (!_module.m_resolver->m_PDBFile)
 	{
 		_module.m_resolver->m_PDBFile = rtm_new<PDBFile>();
-		wchar_t symbolPath[1024];
-		wcscpy(symbolPath, L"");
+		wchar_t symbolPath[4096];	// must match findSymbol's wchar_t[4096] contract
+		symbolPath[0] = L'\0';
 		const char* symStore = _module.m_resolver->m_symbolStore ? _module.m_resolver->m_symbolStore : (const char*)g_symStore;
 		findSymbol(_module.m_module.m_modulePath, symbolPath, symStore);
 
@@ -753,69 +758,8 @@ char* ResolveInfo::scratch(const char* _str)
 	return ret;
 }
 
-#if RTM_PLATFORM_WINDOWS
-
-class DiaLoadCallBack : public IDiaLoadCallback2
-{
-	private:
-		uint32_t	m_RefCount;
-		wchar_t*	m_Buffer;
-
-	public:
-		DiaLoadCallBack(wchar_t inBuffer[1024]) : m_RefCount(0), m_Buffer(inBuffer) {}
-		virtual ~DiaLoadCallBack() {}
-
-    //	IUnknown
-	ULONG STDMETHODCALLTYPE AddRef() { m_RefCount++; return m_RefCount; }
-	ULONG STDMETHODCALLTYPE Release()
-	{
-		if (--m_RefCount == 0)
-		{
-			delete this;
-			return 0;
-		}
-		return m_RefCount;
-	}
-    HRESULT STDMETHODCALLTYPE QueryInterface( REFIID rid, void **ppUnk )
-	{
-		if (ppUnk == NULL) 
-			return E_INVALIDARG;
-
-		if (rid == IID_IDiaLoadCallback2)
-			*ppUnk = (IDiaLoadCallback2 *)this;
-		else if (rid == IID_IDiaLoadCallback)
-			*ppUnk = (IDiaLoadCallback *)this;
-		else if (rid == IID_IUnknown)
-			*ppUnk = (IUnknown *)this;
-		else
-			*ppUnk = NULL;
-		if ( *ppUnk != NULL ) 
-		{
-			AddRef();
-			return S_OK;
-		}
-		return E_NOINTERFACE;
-	}
-
-	//	Rest
-	HRESULT STDMETHODCALLTYPE NotifyDebugDir(BOOL, DWORD, BYTE[]) { return S_OK; }
-    HRESULT STDMETHODCALLTYPE NotifyOpenDBG(LPCOLESTR, HRESULT) { return S_OK; }
-
-    HRESULT STDMETHODCALLTYPE NotifyOpenPDB(LPCOLESTR pdbPath, HRESULT resultCode)
-	{
-		if (resultCode == S_OK)
-			wcscpy(m_Buffer, pdbPath);
-		return S_OK; 
-	}
-
-    HRESULT STDMETHODCALLTYPE RestrictRegistryAccess() { return S_OK; }
-    HRESULT STDMETHODCALLTYPE RestrictSymbolServerAccess() { return S_OK; }
-    HRESULT STDMETHODCALLTYPE RestrictOriginalPathAccess() { return S_OK; }
-    HRESULT STDMETHODCALLTYPE RestrictReferencePathAccess() { return S_OK; }
-    HRESULT STDMETHODCALLTYPE RestrictDBGAccess() { return S_OK; }
-    HRESULT STDMETHODCALLTYPE RestrictSystemRootAccess() { return S_OK; }
-};
-#endif // RTM_PLATFORM_WINDOWS
+// (The DIA load callback that captures the resolved PDB path lives in pdb_file.cpp, alongside
+// findSymbol() which actually drives loadDataForExe; the former duplicate here was dead code.)
 
 inline const Module* addressGetModule(uintptr_t _resolver, uint64_t _address)
 {

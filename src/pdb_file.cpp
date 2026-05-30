@@ -65,59 +65,6 @@ const GUID IID_IDiaLoadCallback = { 0xC32ADB82, 0x73F4, 0x421B, 0x95, 0xD5, 0xA4
 	UNDNAME_32_BIT_DECODE			| \
 	0)
 
-#if RTM_PLATFORM_WINDOWS
-
-struct FileDownloader
-{
-	HINTERNET hInternet = nullptr;
-	HINTERNET hConnect = nullptr;
-
-	FileDownloader()
-	{
-		hInternet = InternetOpenA("FileDownload", INTERNET_OPEN_TYPE_DIRECT, NULL, NULL, 0);
-		RTM_ASSERT(hInternet, "");
-	}
-
-	~FileDownloader()
-	{
-		if (hConnect)	InternetCloseHandle(hConnect);
-		if (hInternet)	InternetCloseHandle(hInternet);
-	}
-
-	bool downloadFile(const std::wstring& _url, const std::wstring& _destinationPath)
-	{
-		(void)_destinationPath;
-		if (!hInternet)
-			return false;
-
-		hConnect = InternetOpenUrlW(hInternet, _url.c_str(), NULL, 0, INTERNET_FLAG_RELOAD, 0);
-		if (!hConnect)
-			return false;
-
-		// Generate a filename based on the URL
-		std::wstring outputFileName = L"temp.pdb"; // Default filename
-		size_t lastSlashPos = _url.find_last_of('/');
-		if (lastSlashPos != std::string::npos)
-			outputFileName = _url.substr(lastSlashPos + 1);
-
-		// Save the downloaded content to a file
-		FILE* f = fopen("tempomat.pdb", "wb");
-		if (!f)
-			return false;
-
-		// Read and save the content
-		char buffer[1024];
-		DWORD bytesRead;
-		while (InternetReadFile(hConnect, buffer, sizeof(buffer), &bytesRead) && bytesRead > 0) {
-			fwrite(buffer, 1, bytesRead, f);
-		}
-
-		fclose(f);
-		return true;
-	}
-};
-#endif
-
 namespace rdebug {
 
 	class DiaLoadCallBack : public IDiaLoadCallback2
@@ -125,9 +72,10 @@ namespace rdebug {
 	private:
 		uint32_t	m_refCount;
 		wchar_t*	m_buffer;
+		size_t		m_bufferCount;	// capacity of m_buffer in wchar_t (incl. null)
 
 	public:
-		DiaLoadCallBack(wchar_t* inBuffer) : m_refCount(0), m_buffer(inBuffer) {}
+		DiaLoadCallBack(wchar_t* inBuffer, size_t inBufferCount) : m_refCount(0), m_buffer(inBuffer), m_bufferCount(inBufferCount) {}
 		virtual ~DiaLoadCallBack() {}
 
 		//	IUnknown
@@ -167,8 +115,11 @@ namespace rdebug {
 		//	Rest
 		HRESULT STDMETHODCALLTYPE NotifyOpenPDB(LPCOLESTR _pdbPath, HRESULT _resultCode)
 		{
-			if (_resultCode == S_OK)
-				wcscpy(m_buffer, _pdbPath);
+			if (_resultCode == S_OK && m_buffer && m_bufferCount)
+			{
+				wcsncpy(m_buffer, _pdbPath, m_bufferCount);	// DIA path -> bounded into the caller's buffer
+				m_buffer[m_bufferCount - 1] = L'\0';
+			}
 #if RTM_DEBUG
 			else
 			{
@@ -215,6 +166,48 @@ namespace rdebug {
 		uint8_t buf[4];
 		if (fread(buf, 1, 4, _file) != 4) return 0;
 		return (uint32_t)buf[0] | (uint32_t)buf[1] << 8 | (uint32_t)buf[2] << 16 | (uint32_t)buf[3] << 24;
+	}
+
+	/// Converts a UTF-8 string to a wide (UTF-16) string, bounded to _outCount wchar_t (incl. the
+	/// null terminator). PDB paths and the symbol-server URLs derived from them are UTF-8, so this
+	/// uses CP_UTF8 - mbstowcs() honours the C locale (typically not UTF-8) and mangles non-ASCII
+	/// paths. Returns the number of wchar_t written (excluding null), or 0 on failure/empty.
+	static size_t utf8ToWide(const char* _utf8, wchar_t* _out, size_t _outCount)
+	{
+		if (!_out || (_outCount == 0))
+			return 0;
+		_out[0] = L'\0';
+		const int n = MultiByteToWideChar(CP_UTF8, 0, _utf8, -1, _out, (int)_outCount);
+		if (n <= 0)									// 0 == failure (incl. buffer too small)
+		{
+			_out[0] = L'\0';
+			return 0;
+		}
+		return (size_t)(n - 1);						// n counts the null terminator
+	}
+
+	/// Bounded wide-string copy: copies _src into _dst (capacity _dstCount wchar_t) and always
+	/// null-terminates. Used wherever a path derived from (untrusted) PE/symbol-server data is
+	/// written into a smaller fixed output buffer.
+	static inline void wideCopyBounded(wchar_t* _dst, size_t _dstCount, const wchar_t* _src)
+	{
+		if (!_dst || (_dstCount == 0))
+			return;
+		wcsncpy(_dst, _src, _dstCount);
+		_dst[_dstCount - 1] = L'\0';
+	}
+
+	/// Bounded wide-string append: concatenates _src onto _dst (capacity _dstCount wchar_t),
+	/// truncating rather than overflowing, and always null-terminates.
+	static inline void wideCatBounded(wchar_t* _dst, size_t _dstCount, const wchar_t* _src)
+	{
+		if (!_dst || (_dstCount == 0))
+			return;
+		const size_t len = wcsnlen(_dst, _dstCount);
+		if (len >= (_dstCount - 1))
+			return;									// already full
+		wcsncpy(_dst + len, _src, _dstCount - len);
+		_dst[_dstCount - 1] = L'\0';
 	}
 
 	/// Extracts the PDB file path from a PE executable's CodeView (RSDS) debug directory entry.
@@ -326,12 +319,10 @@ namespace rdebug {
 			if (rtm::strLen(pdbPathUtf8) == 0)
 				continue;
 
-			// Convert UTF-8 PDB path to wide string
-			size_t converted = mbstowcs(_outPdbPath, pdbPathUtf8, _outSize - 1);
-			if (converted == (size_t)-1 || converted == 0)
+			// Convert UTF-8 PDB path to wide string (CP_UTF8, bounded)
+			if (utf8ToWide(pdbPathUtf8, _outPdbPath, _outSize) == 0)
 				continue;
 
-			_outPdbPath[converted] = L'\0';
 			fclose(file);
 			return true;
 		}
@@ -505,18 +496,14 @@ namespace rdebug {
 			{
 				char relBuffer[4096];
 				snprintf(relBuffer, sizeof(relBuffer), "%s\\%s%s\\%s", pdbFileName, guidStr, ageStr, pdbFileName);
-				size_t convertedRel = mbstowcs(_outRelPath, relBuffer, _relSize - 1);
-				if (convertedRel == (size_t)-1)
+				if (utf8ToWide(relBuffer, _outRelPath, _relSize) == 0)
 					continue;
-				_outRelPath[convertedRel] = L'\0';
 			}
 
-			// Convert to wide string
-			size_t converted = mbstowcs(_outUrl, urlBuffer, _outSize - 1);
-			if (converted == (size_t)-1 || converted == 0)
+			// Convert to wide string (CP_UTF8, bounded)
+			if (utf8ToWide(urlBuffer, _outUrl, _outSize) == 0)
 				continue;
 
-			_outUrl[converted] = L'\0';
 			fclose(file);
 			return true;
 		}
@@ -666,29 +653,28 @@ namespace rdebug {
 		}
 		else
 		{
-			GetTempPathW(RTM_NUM_ELEMENTS(cacheDir), cacheDir);
-			wcscat(cacheDir, L"symbolcache");
+			const DWORD tmpLen = GetTempPathW(RTM_NUM_ELEMENTS(cacheDir), cacheDir);
+			if ((tmpLen == 0) || (tmpLen >= RTM_NUM_ELEMENTS(cacheDir)))
+				return false;
+			wideCatBounded(cacheDir, RTM_NUM_ELEMENTS(cacheDir), L"symbolcache");
 		}
 
+		// Build bounded: a crafted PE could embed a pathologically long PDB path.
 		wchar_t cachePdbPath[8 * 1024];
-		wcscpy(cachePdbPath, cacheDir);
-		wcscat(cachePdbPath, L"\\");
-		wcscat(cachePdbPath, pdbRelPath);
+		_snwprintf(cachePdbPath, RTM_NUM_ELEMENTS(cachePdbPath), L"%s\\%s", cacheDir, pdbRelPath);
+		cachePdbPath[RTM_NUM_ELEMENTS(cachePdbPath) - 1] = L'\0';
 
 		// Cache hit?
 		if (INVALID_FILE_ATTRIBUTES != GetFileAttributesW(cachePdbPath))
 		{
 			if (_outCachePath && _outSize)
-			{
-				wcsncpy(_outCachePath, cachePdbPath, _outSize);
-				_outCachePath[_outSize - 1] = L'\0';
-			}
+				wideCopyBounded(_outCachePath, _outSize, cachePdbPath);
 			return true;
 		}
 
 		// Parent directory (<cache>\<pdb>\<GUID><AGE>).
 		wchar_t parentDir[8 * 1024];
-		wcscpy(parentDir, cachePdbPath);
+		wideCopyBounded(parentDir, RTM_NUM_ELEMENTS(parentDir), cachePdbPath);
 		{
 			size_t pl = wcslen(parentDir);
 			while ((pl > 0) && (parentDir[pl - 1] != L'\\') && (parentDir[pl - 1] != L'/'))
@@ -726,10 +712,7 @@ namespace rdebug {
 				if (MoveFileW(tmpPath, cachePdbPath))
 				{
 					if (_outCachePath && _outSize)
-					{
-						wcsncpy(_outCachePath, cachePdbPath, _outSize);
-						_outCachePath[_outSize - 1] = L'\0';
-					}
+						wideCopyBounded(_outCachePath, _outSize, cachePdbPath);
 					ok = true;
 				}
 			}
@@ -777,7 +760,7 @@ namespace rdebug {
 		else
 		{
 			rtm::MultiToWide widePath(_path);
-			wcscpy(moduleName, widePath);
+			wideCopyBounded(moduleName, RTM_NUM_ELEMENTS(moduleName), widePath);
 		}
 
 		if (rtm::strLen(_symbolStore) > 1) // not ("" or null)
@@ -826,7 +809,7 @@ namespace rdebug {
 
 		wchar_t outSymbolPath[32 * 1024];
 		outSymbolPath[0] = L'\0';
-		DiaLoadCallBack* callback = new DiaLoadCallBack(outSymbolPath);
+		DiaLoadCallBack* callback = new DiaLoadCallBack(outSymbolPath, RTM_NUM_ELEMENTS(outSymbolPath));
 		callback->AddRef();
 		hr = pIDiaDataSource->loadDataForExe(moduleName, (LPOLESTR)rtm::MultiToWide(symStoreBuffer), callback);
 		callback->Release();
@@ -841,7 +824,7 @@ namespace rdebug {
 				// If the embedded path is absolute and the file exists, use it directly
 				if (INVALID_FILE_ATTRIBUTES != GetFileAttributesW(embeddedPdbPath))
 				{
-					wcscpy(_outSymbolPath, embeddedPdbPath);
+					wideCopyBounded(_outSymbolPath, 4096, embeddedPdbPath);	// _outSymbolPath is wchar_t[4096]
 					pIDiaDataSource->Release();
 					return true;
 				}
@@ -860,16 +843,16 @@ namespace rdebug {
 
 				// Build path: exe directory + pdb filename
 				wchar_t candidatePath[8 * 1024];
-				wcscpy(candidatePath, moduleName);
+				wideCopyBounded(candidatePath, RTM_NUM_ELEMENTS(candidatePath), moduleName);
 				size_t modLen = wcslen(candidatePath);
 				while (modLen > 0 && candidatePath[modLen - 1] != L'\\' && candidatePath[modLen - 1] != L'/')
 					--modLen;
 				candidatePath[modLen] = L'\0';
-				wcscat(candidatePath, pdbFileName);
+				wideCatBounded(candidatePath, RTM_NUM_ELEMENTS(candidatePath), pdbFileName);
 
 				if (INVALID_FILE_ATTRIBUTES != GetFileAttributesW(candidatePath))
 				{
-					wcscpy(_outSymbolPath, candidatePath);
+					wideCopyBounded(_outSymbolPath, 4096, candidatePath);	// _outSymbolPath is wchar_t[4096]
 					pIDiaDataSource->Release();
 					return true;
 				}
@@ -921,15 +904,20 @@ namespace rdebug {
 					}
 					else
 					{
-						GetTempPathW(RTM_NUM_ELEMENTS(cacheDir), cacheDir);
-						wcscat(cacheDir, L"symbolcache");
+						const DWORD tmpLen = GetTempPathW(RTM_NUM_ELEMENTS(cacheDir), cacheDir);
+						if ((tmpLen == 0) || (tmpLen >= RTM_NUM_ELEMENTS(cacheDir)))
+						{
+							pIDiaDataSource->Release();
+							return false;
+						}
+						wideCatBounded(cacheDir, RTM_NUM_ELEMENTS(cacheDir), L"symbolcache");
 					}
 
 					// Full path of the cached PDB: <cache>\<pdb>\<GUID><AGE>\<pdb>
+					// Built bounded: a crafted PE could embed a pathologically long PDB path.
 					wchar_t cachePdbPath[8 * 1024];
-					wcscpy(cachePdbPath, cacheDir);
-					wcscat(cachePdbPath, L"\\");
-					wcscat(cachePdbPath, pdbRelPath);
+					_snwprintf(cachePdbPath, RTM_NUM_ELEMENTS(cachePdbPath), L"%s\\%s", cacheDir, pdbRelPath);
+					cachePdbPath[RTM_NUM_ELEMENTS(cachePdbPath) - 1] = L'\0';
 
 					rtm::WideToMulti pdbNameMb(pdbRelPath);
 
@@ -942,14 +930,14 @@ namespace rdebug {
 					// Cache hit - already downloaded (by us or symsrv) on a previous run.
 					if (INVALID_FILE_ATTRIBUTES != GetFileAttributesW(cachePdbPath))
 					{
-						wcscpy(_outSymbolPath, cachePdbPath);
+						wideCopyBounded(_outSymbolPath, 4096, cachePdbPath);	// _outSymbolPath is wchar_t[4096]
 						pIDiaDataSource->Release();
 						return true;
 					}
 
 					// Create the parent directory (<cache>\<pdb>\<GUID><AGE>).
 					wchar_t parentDir[8 * 1024];
-					wcscpy(parentDir, cachePdbPath);
+					wideCopyBounded(parentDir, RTM_NUM_ELEMENTS(parentDir), cachePdbPath);
 					{
 						size_t pl = wcslen(parentDir);
 						while ((pl > 0) && (parentDir[pl - 1] != L'\\') && (parentDir[pl - 1] != L'/'))
@@ -962,8 +950,8 @@ namespace rdebug {
 					// Download to a sidecar file, then move into place, so a partial/failed
 					// download is never left behind as a valid-looking cache entry.
 					wchar_t tmpPath[8 * 1024];
-					wcscpy(tmpPath, cachePdbPath);
-					wcscat(tmpPath, L".download");
+					_snwprintf(tmpPath, RTM_NUM_ELEMENTS(tmpPath), L"%s.download", cachePdbPath);
+					tmpPath[RTM_NUM_ELEMENTS(tmpPath) - 1] = L'\0';
 					DeleteFileW(tmpPath);
 
 					{
@@ -993,7 +981,7 @@ namespace rdebug {
 							if (MoveFileW(tmpPath, cachePdbPath))
 							{
 								rtm::Console::info("Symbols: downloaded PDB '%s' from symbol server\n", pdbNameMb.m_ptr);
-								wcscpy(_outSymbolPath, cachePdbPath);
+								wideCopyBounded(_outSymbolPath, 4096, cachePdbPath);	// _outSymbolPath is wchar_t[4096]
 								pIDiaDataSource->Release();
 								return true;
 							}
@@ -1021,10 +1009,10 @@ namespace rdebug {
 
 				if (len > 0)
 				{
-					wcscpy(&moduleName[len], L".pdb");
+					wideCopyBounded(&moduleName[len], RTM_NUM_ELEMENTS(moduleName) - len, L".pdb");
 					if (INVALID_FILE_ATTRIBUTES != GetFileAttributesW(moduleName))
 					{
-						wcscpy(_outSymbolPath, moduleName);
+						wideCopyBounded(_outSymbolPath, 4096, moduleName);	// _outSymbolPath is wchar_t[4096]
 						pIDiaDataSource->Release();
 						return true;
 					}
@@ -1035,7 +1023,7 @@ namespace rdebug {
 			return false;
 		}
 
-		wcscpy(_outSymbolPath, outSymbolPath);
+		wideCopyBounded(_outSymbolPath, 4096, outSymbolPath);	// _outSymbolPath is wchar_t[4096]
 		pIDiaDataSource->Release();
 		return true;
 	}
