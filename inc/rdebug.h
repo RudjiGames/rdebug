@@ -85,6 +85,14 @@ namespace rdebug {
 	///
 	void symbolSetServerSource(const char* _symStore);
 
+	/// Symbol-resolution status callback - receives human-readable progress messages such as
+	/// symbol-server downloads. Optional; when unset, no status is reported.
+	typedef void (*symbol_status_cb)(const char* _message, void* _userData);
+
+	/// Registers a callback for symbol-resolution status messages (downloads, failures, ...).
+	/// Pass (0, 0) to clear. Safe to leave unset.
+	void symbolResolverSetStatusCallback(symbol_status_cb _callback, void* _userData);
+
 	/// Creates debug symbol resolver based on 
 	///
 	/// @param _moduleInfos

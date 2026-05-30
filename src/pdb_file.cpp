@@ -6,6 +6,7 @@
 #include <rdebug_pch.h>
 #include <rdebug/src/pdb_file.h>
 #include <rdebug/src/symbols_types.h>
+#include <rbase/inc/console.h>
 
 #if RTM_PLATFORM_WINDOWS
 
@@ -342,9 +343,11 @@ namespace rdebug {
 	/// Builds a symbol server URL for downloading a PDB file based on the RSDS debug information.
 	/// Format: http(s)://symbolserver/pdbname/GUIDAGE/pdbname
 	/// Example: https://msdl.microsoft.com/download/symbols/ntdll.pdb/1234567890ABCDEF1/ntdll.pdb
-	static bool buildPdbDownloadUrl(const wchar_t* _exePath, const char* _symbolServer, wchar_t* _outUrl, size_t _outSize)
+	static bool buildPdbDownloadUrl(const wchar_t* _exePath, const char* _symbolServer, wchar_t* _outUrl, size_t _outSize, wchar_t* _outRelPath, size_t _relSize)
 	{
 		_outUrl[0] = L'\0';
+		if (_outRelPath && _relSize)
+			_outRelPath[0] = L'\0';
 
 		if (!_symbolServer || rtm::strLen(_symbolServer) == 0)
 			return false;
@@ -496,6 +499,18 @@ namespace rdebug {
 			char urlBuffer[4096];
 			snprintf(urlBuffer, sizeof(urlBuffer), "%s/%s/%s%s/%s", symbolServer, pdbFileName, guidStr, ageStr, pdbFileName);
 
+			// Same file's on-disk (symsrv) layout: <pdb>\<GUID><AGE>\<pdb>. Mirroring it lets a
+			// PDB fetched here be reused (and found by symsrv) on later runs.
+			if (_outRelPath && (_relSize > 0))
+			{
+				char relBuffer[4096];
+				snprintf(relBuffer, sizeof(relBuffer), "%s\\%s%s\\%s", pdbFileName, guidStr, ageStr, pdbFileName);
+				size_t convertedRel = mbstowcs(_outRelPath, relBuffer, _relSize - 1);
+				if (convertedRel == (size_t)-1)
+					continue;
+				_outRelPath[convertedRel] = L'\0';
+			}
+
 			// Convert to wide string
 			size_t converted = mbstowcs(_outUrl, urlBuffer, _outSize - 1);
 			if (converted == (size_t)-1 || converted == 0)
@@ -511,6 +526,102 @@ namespace rdebug {
 	}
 
 	extern char	 g_symStore[ResolveInfo::SYM_SERVER_BUFFER_SIZE];
+	extern void	 rdebugReportStatus(const char* _message);	// defined in symbols.cpp
+
+	/// Downloads _url to _destPath over HTTP(S). Uses WinINet (already linked) so it follows
+	/// redirects (msdl.microsoft.com -> blob storage) and honors the system/IE proxy config.
+	/// Returns true only on HTTP 200 with the full body written.
+	static bool downloadUrlToFile(const wchar_t* _url, const wchar_t* _destPath)
+	{
+		HINTERNET hInet = InternetOpenW(L"MTuner", INTERNET_OPEN_TYPE_PRECONFIG, 0, 0, 0);
+		if (!hInet)
+			return false;
+
+		bool result = false;
+
+		const DWORD flags = INTERNET_FLAG_RELOAD | INTERNET_FLAG_NO_UI | INTERNET_FLAG_KEEP_CONNECTION | INTERNET_FLAG_NO_CACHE_WRITE;
+		HINTERNET hUrl = InternetOpenUrlW(hInet, _url, 0, 0, flags, 0);
+		if (hUrl)
+		{
+			DWORD status = 0, statusLen = sizeof(status), idx = 0;
+			if (HttpQueryInfoW(hUrl, HTTP_QUERY_STATUS_CODE | HTTP_QUERY_FLAG_NUMBER, &status, &statusLen, &idx) && (status == 200))
+			{
+				FILE* out = _wfopen(_destPath, L"wb");
+				if (out)
+				{
+					char	buffer[64 * 1024];
+					DWORD	read = 0;
+					result = true;
+					while (InternetReadFile(hUrl, buffer, sizeof(buffer), &read) && (read != 0))
+					{
+						if (fwrite(buffer, 1, read, out) != (size_t)read)
+						{
+							result = false;
+							break;
+						}
+					}
+					fclose(out);
+				}
+			}
+			InternetCloseHandle(hUrl);
+		}
+
+		InternetCloseHandle(hInet);
+		return result;
+	}
+
+	/// Extracts the local cache directory from a symbol path of the form "srv*<cache>*<server>"
+	/// (case-insensitive). Returns false if no such cache directory is present.
+	static bool extractSrvCacheDir(const char* _symStore, char* _out, size_t _outSize)
+	{
+		for (const char* p = _symStore; *p; ++p)
+		{
+			if ((p[0] == 's' || p[0] == 'S') &&
+				(p[1] == 'r' || p[1] == 'R') &&
+				(p[2] == 'v' || p[2] == 'V') &&
+				(p[3] == '*'))
+			{
+				const char* cacheStart = p + 4;
+				const char* cacheEnd   = cacheStart;
+				while (*cacheEnd && (*cacheEnd != '*') && (*cacheEnd != ';'))
+					++cacheEnd;
+
+				// require "srv*<cache>*<server>" with a non-empty cache directory
+				if ((*cacheEnd == '*') && (cacheEnd > cacheStart))
+				{
+					size_t len = (size_t)(cacheEnd - cacheStart);
+					if (len < _outSize)
+					{
+						memcpy(_out, cacheStart, len);
+						_out[len] = '\0';
+						return true;
+					}
+				}
+			}
+		}
+		return false;
+	}
+
+	/// Creates every directory component of _dir.
+	static void ensureDirExists(const wchar_t* _dir)
+	{
+		wchar_t tmp[8 * 1024];
+		wcsncpy(tmp, _dir, RTM_NUM_ELEMENTS(tmp));
+		tmp[RTM_NUM_ELEMENTS(tmp) - 1] = L'\0';
+
+		for (wchar_t* p = tmp; *p; ++p)
+		{
+			if ((*p == L'\\') || (*p == L'/'))
+			{
+				const wchar_t saved = *p;
+				*p = L'\0';
+				if (wcslen(tmp) > 0)
+					CreateDirectoryW(tmp, 0);
+				*p = saved;
+			}
+		}
+		CreateDirectoryW(tmp, 0);
+	}
 
 	bool findSymbol(const char* _path, wchar_t _outSymbolPath[4096], const char* _symbolStore)
 	{
@@ -661,22 +772,113 @@ namespace rdebug {
 			if (symbolServerUrl)
 			{
 				wchar_t pdbDownloadUrl[4096];
-				if (buildPdbDownloadUrl(moduleName, symbolServerUrl, pdbDownloadUrl, RTM_NUM_ELEMENTS(pdbDownloadUrl)))
+				wchar_t pdbRelPath[4096];
+				if (buildPdbDownloadUrl(moduleName, symbolServerUrl, pdbDownloadUrl, RTM_NUM_ELEMENTS(pdbDownloadUrl), pdbRelPath, RTM_NUM_ELEMENTS(pdbRelPath)))
 				{
-					// URL built successfully - this will be used for downloading
 #if RTM_DEBUG
 					OutputDebugStringW(L"PDB download URL: ");
 					OutputDebugStringW(pdbDownloadUrl);
 					OutputDebugStringW(L"\n");
 #endif
-					//wchar_t tempPDBPath[8 * 1024];
-					//GetTempPathW(8 * 1024, tempPDBPath);
-					//wcscat(tempPDBPath, L"temp.pdb");
-					//
-					//FileDownloader downloader;
-					//downloader.downloadFile(pdbDownloadUrl, tempPDBPath);
-					//return true;
-					return false;
+					// Resolve the local symbol-cache directory ("<dir>" in srv*<dir>*<server>),
+					// falling back to %TEMP%\symbolcache.
+					wchar_t cacheDir[4096];
+					char    cacheDirMb[4096];
+					if (extractSrvCacheDir(symStoreBuffer, cacheDirMb, sizeof(cacheDirMb)) && cacheDirMb[0])
+					{
+						rtm::MultiToWide cacheW(cacheDirMb);
+						wcsncpy(cacheDir, cacheW, RTM_NUM_ELEMENTS(cacheDir));
+						cacheDir[RTM_NUM_ELEMENTS(cacheDir) - 1] = L'\0';
+					}
+					else
+					{
+						GetTempPathW(RTM_NUM_ELEMENTS(cacheDir), cacheDir);
+						wcscat(cacheDir, L"symbolcache");
+					}
+
+					// Full path of the cached PDB: <cache>\<pdb>\<GUID><AGE>\<pdb>
+					wchar_t cachePdbPath[8 * 1024];
+					wcscpy(cachePdbPath, cacheDir);
+					wcscat(cachePdbPath, L"\\");
+					wcscat(cachePdbPath, pdbRelPath);
+
+					rtm::WideToMulti pdbNameMb(pdbRelPath);
+
+					// Short, user-facing name (e.g. "ntdll.pdb") for status messages.
+					char pdbName[260];
+					rtm::strlCpy(pdbName, sizeof(pdbName), pdbNameMb.m_ptr);
+					for (char* c = pdbName; *c; ++c)
+						if (*c == '\\') { *c = '\0'; break; }
+
+					// Cache hit - already downloaded (by us or symsrv) on a previous run.
+					if (INVALID_FILE_ATTRIBUTES != GetFileAttributesW(cachePdbPath))
+					{
+						wcscpy(_outSymbolPath, cachePdbPath);
+						pIDiaDataSource->Release();
+						return true;
+					}
+
+					// Create the parent directory (<cache>\<pdb>\<GUID><AGE>).
+					wchar_t parentDir[8 * 1024];
+					wcscpy(parentDir, cachePdbPath);
+					{
+						size_t pl = wcslen(parentDir);
+						while ((pl > 0) && (parentDir[pl - 1] != L'\\') && (parentDir[pl - 1] != L'/'))
+							--pl;
+						if (pl > 0)
+							parentDir[pl - 1] = L'\0';
+					}
+					ensureDirExists(parentDir);
+
+					// Download to a sidecar file, then move into place, so a partial/failed
+					// download is never left behind as a valid-looking cache entry.
+					wchar_t tmpPath[8 * 1024];
+					wcscpy(tmpPath, cachePdbPath);
+					wcscat(tmpPath, L".download");
+					DeleteFileW(tmpPath);
+
+					{
+						char statusMsg[512];
+						snprintf(statusMsg, sizeof(statusMsg), "Downloading symbols for %s ...", pdbName);
+						rdebugReportStatus(statusMsg);
+					}
+
+					if (downloadUrlToFile(pdbDownloadUrl, tmpPath))
+					{
+						// Verify it's really a PDB (MSF 7.0 magic) and not, say, an HTML error
+						// page returned with a 200 by a proxy/captive portal - otherwise we'd
+						// cache garbage and fail to load it on every future run.
+						bool isPdb = false;
+						FILE* vf = _wfopen(tmpPath, L"rb");
+						if (vf)
+						{
+							char magic[24];
+							size_t mr = fread(magic, 1, sizeof(magic), vf);
+							fclose(vf);
+							isPdb = (mr == sizeof(magic)) && (memcmp(magic, "Microsoft C/C++ MSF 7.00", sizeof(magic)) == 0);
+						}
+
+						if (isPdb)
+						{
+							DeleteFileW(cachePdbPath);
+							if (MoveFileW(tmpPath, cachePdbPath))
+							{
+								rtm::Console::info("Symbols: downloaded PDB '%s' from symbol server\n", pdbNameMb.m_ptr);
+								wcscpy(_outSymbolPath, cachePdbPath);
+								pIDiaDataSource->Release();
+								return true;
+							}
+						}
+					}
+
+					DeleteFileW(tmpPath);
+					rtm::WideToMulti urlMb(pdbDownloadUrl);
+					rtm::Console::warning("Symbols: PDB download failed for '%s' (%s)\n", pdbNameMb.m_ptr, urlMb.m_ptr);
+					{
+						char statusMsg[512];
+						snprintf(statusMsg, sizeof(statusMsg), "Could not download symbols for %s", pdbName);
+						rdebugReportStatus(statusMsg);
+					}
 				}
 			}
 

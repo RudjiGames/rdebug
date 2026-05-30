@@ -283,6 +283,23 @@ void symbolSetServerSource(const char* _symStore)
 	rtm::strlCpy(g_symStore, ResolveInfo::SYM_SERVER_BUFFER_SIZE, _symStore);
 }
 
+static symbol_status_cb	g_statusCallback	= 0;
+static void*			g_statusUserData	= 0;
+
+void symbolResolverSetStatusCallback(symbol_status_cb _callback, void* _userData)
+{
+	g_statusCallback	= _callback;
+	g_statusUserData	= _userData;
+}
+
+// Forwards a status message to the registered callback (if any). Used by the symbol-server
+// download path in pdb_file.cpp so the host app can surface resolution progress.
+void rdebugReportStatus(const char* _message)
+{
+	if (g_statusCallback && _message)
+		g_statusCallback(_message, g_statusUserData);
+}
+
 // Reads the preferred image base from a PE binary's optional header (0 on failure).
 // Needed to undo ASLR for addr2line: addr2line wants imageBase + RVA, but the captured
 // address is loadBase + RVA, and with ASLR loadBase != imageBase.
