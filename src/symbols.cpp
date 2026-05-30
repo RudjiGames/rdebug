@@ -365,6 +365,43 @@ uintptr_t symbolResolverCreate(ModuleInfo* _moduleInfos, uint32_t _numInfos, con
 	// modules can never be resolved.
 	rtm::Console::info("Symbol resolver: processing %u modules\n", _numInfos);
 
+#if RTM_PLATFORM_WINDOWS
+	// Pre-fetch module PDBs from the symbol server into the local cache in parallel, so the
+	// per-module loadPDB() calls below hit the cache instead of downloading one at a time.
+	// Pure network + file I/O (no DIA/COM/GUI), so it is safe to run on a thread pool; the
+	// status message is emitted from this (the calling) thread only.
+	extern bool rdebugPrefetchModulePdb(const char* _modulePath, const char* _symStore);
+	if (g_symStore[0] && rtm::strStr(g_symStore, "http") && (_numInfos > 1))
+	{
+		rdebugReportStatus("Downloading symbols from symbol server ...");
+
+		uint32_t hw = std::thread::hardware_concurrency();
+		if (hw == 0)
+			hw = 4;
+		const uint32_t threadCount = (_numInfos < hw) ? _numInfos : hw;
+
+		std::atomic<uint32_t> nextModule(0);
+		auto worker = [&]()
+		{
+			for (;;)
+			{
+				const uint32_t i = nextModule.fetch_add(1);
+				if (i >= _numInfos)
+					break;
+				rdebugPrefetchModulePdb(_moduleInfos[i].m_modulePath, g_symStore);
+			}
+		};
+
+		std::vector<std::thread> pool;
+		pool.reserve(threadCount - 1);
+		for (uint32_t t = 1; t < threadCount; ++t)
+			pool.emplace_back(worker);
+		worker();
+		for (size_t t = 0; t < pool.size(); ++t)
+			pool[t].join();
+	}
+#endif // RTM_PLATFORM_WINDOWS
+
 	for (uint32_t i=0; i<_numInfos; ++i)
 	{
 		Module module;

@@ -623,6 +623,133 @@ namespace rdebug {
 		CreateDirectoryW(tmp, 0);
 	}
 
+	// Ensures the PDB matching _moduleName is present in the local symbol cache, downloading it
+	// from the symbol server referenced in _symStore if needed. Fills _outCachePath and returns
+	// true on success. Touches no DIA/COM or GUI state, so it is safe to run concurrently for
+	// different modules (used by the parallel pre-fetch). Mirrors findSymbol's Strategy-2 cache
+	// layout so the two share cache entries.
+	static bool fetchPdbToCache(const wchar_t* _moduleName, const char* _symStore, wchar_t* _outCachePath, size_t _outSize)
+	{
+		if (_outCachePath && _outSize)
+			_outCachePath[0] = L'\0';
+
+		// First http(s) symbol-server URL in the search path.
+		const char* httpStart = rtm::strStr(_symStore, "http");
+		if (!httpStart)
+			return false;
+
+		char serverUrl[1024];
+		{
+			const char* httpEnd = httpStart;
+			while (*httpEnd && (*httpEnd != ';') && (*httpEnd != '*'))
+				++httpEnd;
+			size_t urlLen = (size_t)(httpEnd - httpStart);
+			if ((urlLen == 0) || (urlLen >= sizeof(serverUrl)))
+				return false;
+			rtm::memCopy(serverUrl, sizeof(serverUrl), httpStart, urlLen);
+			serverUrl[urlLen] = '\0';
+		}
+
+		wchar_t pdbDownloadUrl[4096];
+		wchar_t pdbRelPath[4096];
+		if (!buildPdbDownloadUrl(_moduleName, serverUrl, pdbDownloadUrl, RTM_NUM_ELEMENTS(pdbDownloadUrl), pdbRelPath, RTM_NUM_ELEMENTS(pdbRelPath)))
+			return false;
+
+		// Cache directory ("<dir>" in srv*<dir>*<server>), else %TEMP%\symbolcache.
+		wchar_t cacheDir[4096];
+		char    cacheDirMb[4096];
+		if (extractSrvCacheDir(_symStore, cacheDirMb, sizeof(cacheDirMb)) && cacheDirMb[0])
+		{
+			rtm::MultiToWide cacheW(cacheDirMb);
+			wcsncpy(cacheDir, cacheW, RTM_NUM_ELEMENTS(cacheDir));
+			cacheDir[RTM_NUM_ELEMENTS(cacheDir) - 1] = L'\0';
+		}
+		else
+		{
+			GetTempPathW(RTM_NUM_ELEMENTS(cacheDir), cacheDir);
+			wcscat(cacheDir, L"symbolcache");
+		}
+
+		wchar_t cachePdbPath[8 * 1024];
+		wcscpy(cachePdbPath, cacheDir);
+		wcscat(cachePdbPath, L"\\");
+		wcscat(cachePdbPath, pdbRelPath);
+
+		// Cache hit?
+		if (INVALID_FILE_ATTRIBUTES != GetFileAttributesW(cachePdbPath))
+		{
+			if (_outCachePath && _outSize)
+			{
+				wcsncpy(_outCachePath, cachePdbPath, _outSize);
+				_outCachePath[_outSize - 1] = L'\0';
+			}
+			return true;
+		}
+
+		// Parent directory (<cache>\<pdb>\<GUID><AGE>).
+		wchar_t parentDir[8 * 1024];
+		wcscpy(parentDir, cachePdbPath);
+		{
+			size_t pl = wcslen(parentDir);
+			while ((pl > 0) && (parentDir[pl - 1] != L'\\') && (parentDir[pl - 1] != L'/'))
+				--pl;
+			if (pl > 0)
+				parentDir[pl - 1] = L'\0';
+		}
+		ensureDirExists(parentDir);
+
+		// Download to a sidecar file, validate the PDB (MSF) magic, then move into place so a
+		// partial/failed download is never cached.
+		wchar_t tmpPath[8 * 1024];
+		wcscpy(tmpPath, cachePdbPath);
+		wcscat(tmpPath, L".download");
+		DeleteFileW(tmpPath);
+
+		bool ok = false;
+		if (downloadUrlToFile(pdbDownloadUrl, tmpPath))
+		{
+			bool isPdb = false;
+			FILE* vf = _wfopen(tmpPath, L"rb");
+			if (vf)
+			{
+				char magic[24];
+				size_t mr = fread(magic, 1, sizeof(magic), vf);
+				fclose(vf);
+				isPdb = (mr == sizeof(magic)) && (memcmp(magic, "Microsoft C/C++ MSF 7.00", sizeof(magic)) == 0);
+			}
+
+			if (isPdb)
+			{
+				DeleteFileW(cachePdbPath);
+				if (MoveFileW(tmpPath, cachePdbPath))
+				{
+					if (_outCachePath && _outSize)
+					{
+						wcsncpy(_outCachePath, cachePdbPath, _outSize);
+						_outCachePath[_outSize - 1] = L'\0';
+					}
+					ok = true;
+				}
+			}
+		}
+
+		if (!ok)
+			DeleteFileW(tmpPath);
+		return ok;
+	}
+
+	// Pre-fetches a module's PDB into the local symbol cache. Parallel-safe (no DIA/COM/GUI);
+	// used by the resolver to download many modules' symbols concurrently up front.
+	bool rdebugPrefetchModulePdb(const char* _modulePath, const char* _symStore)
+	{
+		if (!_modulePath || !_modulePath[0] || !_symStore || !_symStore[0])
+			return false;
+
+		rtm::MultiToWide moduleW(_modulePath);
+		wchar_t cachePath[8 * 1024];
+		return fetchPdbToCache(moduleW, _symStore, cachePath, RTM_NUM_ELEMENTS(cachePath));
+	}
+
 	bool findSymbol(const char* _path, wchar_t _outSymbolPath[4096], const char* _symbolStore)
 	{
 		IDiaDataSource* pIDiaDataSource = nullptr;
