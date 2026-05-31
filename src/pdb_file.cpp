@@ -517,9 +517,14 @@ namespace rdebug {
 
 	/// Downloads _url to _destPath over HTTP(S). Uses WinINet (already linked) so it follows
 	/// redirects (msdl.microsoft.com -> blob storage) and honors the system/IE proxy config.
-	/// Returns true only on HTTP 200 with the full body written.
-	static bool downloadUrlToFile(const wchar_t* _url, const wchar_t* _destPath)
+	/// Returns true only on HTTP 200 with the full body written. When _outStatus is non-null it
+	/// receives the HTTP status code (0 if the connection/request never produced one), so callers
+	/// can tell a definitive "not found" (4xx) from a transient network/server error.
+	static bool downloadUrlToFile(const wchar_t* _url, const wchar_t* _destPath, DWORD* _outStatus = nullptr)
 	{
+		if (_outStatus)
+			*_outStatus = 0;
+
 		HINTERNET hInet = InternetOpenW(L"MTuner", INTERNET_OPEN_TYPE_PRECONFIG, 0, 0, 0);
 		if (!hInet)
 			return false;
@@ -531,7 +536,10 @@ namespace rdebug {
 		if (hUrl)
 		{
 			DWORD status = 0, statusLen = sizeof(status), idx = 0;
-			if (HttpQueryInfoW(hUrl, HTTP_QUERY_STATUS_CODE | HTTP_QUERY_FLAG_NUMBER, &status, &statusLen, &idx) && (status == 200))
+			const bool gotStatus = HttpQueryInfoW(hUrl, HTTP_QUERY_STATUS_CODE | HTTP_QUERY_FLAG_NUMBER, &status, &statusLen, &idx) != FALSE;
+			if (_outStatus && gotStatus)
+				*_outStatus = status;
+			if (gotStatus && (status == 200))
 			{
 				FILE* out = _wfopen(_destPath, L"wb");
 				if (out)
@@ -610,6 +618,47 @@ namespace rdebug {
 		CreateDirectoryW(tmp, 0);
 	}
 
+	// Negative cache: a marker sitting next to where the PDB would be cached, recording that the
+	// symbol server returned "not found" for this exact module GUID/age. Without it, every module
+	// whose PDB isn't on the server (the app's own modules, game/engine modules, ...) is re-requested
+	// over the network on every single capture load - the dominant cause of the repeated download
+	// pause. The marker expires so symbols published later are eventually retried.
+	static const uint64_t kMissMarkerTtl100ns = (uint64_t)30 * 24 * 60 * 60 * 10000000ull;	// 30 days
+
+	static void missMarkerPath(const wchar_t* _cachePdbPath, wchar_t* _out, size_t _outCount)
+	{
+		_snwprintf(_out, _outCount, L"%s.miss", _cachePdbPath);
+		_out[_outCount - 1] = L'\0';
+	}
+
+	// True if a non-expired "not found" marker exists for this cache path.
+	static bool negativeCacheHit(const wchar_t* _cachePdbPath)
+	{
+		wchar_t marker[8 * 1024];
+		missMarkerPath(_cachePdbPath, marker, RTM_NUM_ELEMENTS(marker));
+
+		WIN32_FILE_ATTRIBUTE_DATA fad;
+		if (!GetFileAttributesExW(marker, GetFileExInfoStandard, &fad))
+			return false;
+
+		ULARGE_INTEGER mt;	mt.LowPart = fad.ftLastWriteTime.dwLowDateTime;	mt.HighPart = fad.ftLastWriteTime.dwHighDateTime;
+		FILETIME nowFt;		GetSystemTimeAsFileTime(&nowFt);
+		ULARGE_INTEGER now;	now.LowPart = nowFt.dwLowDateTime;				now.HighPart = nowFt.dwHighDateTime;
+
+		return now.QuadPart <= (mt.QuadPart + kMissMarkerTtl100ns);	// still fresh -> treat as known-missing
+	}
+
+	// Records (or refreshes) the "not found" marker. _parentDir must already exist.
+	static void writeMissMarker(const wchar_t* _cachePdbPath)
+	{
+		wchar_t marker[8 * 1024];
+		missMarkerPath(_cachePdbPath, marker, RTM_NUM_ELEMENTS(marker));
+
+		HANDLE h = CreateFileW(marker, GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, 0, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL | FILE_ATTRIBUTE_HIDDEN, 0);
+		if (h != INVALID_HANDLE_VALUE)
+			CloseHandle(h);
+	}
+
 	// Ensures the PDB matching _moduleName is present in the local symbol cache, downloading it
 	// from the symbol server referenced in _symStore if needed. Fills _outCachePath and returns
 	// true on success. Touches no DIA/COM or GUI state, so it is safe to run concurrently for
@@ -672,6 +721,11 @@ namespace rdebug {
 			return true;
 		}
 
+		// Negative-cache hit: the server already told us this PDB isn't available. Skip the
+		// network round-trip that would otherwise repeat on every load.
+		if (negativeCacheHit(cachePdbPath))
+			return false;
+
 		// Parent directory (<cache>\<pdb>\<GUID><AGE>).
 		wchar_t parentDir[8 * 1024];
 		wideCopyBounded(parentDir, RTM_NUM_ELEMENTS(parentDir), cachePdbPath);
@@ -704,7 +758,8 @@ namespace rdebug {
 		}
 
 		bool ok = false;
-		if (downloadUrlToFile(pdbDownloadUrl, tmpPath))
+		DWORD httpStatus = 0;
+		if (downloadUrlToFile(pdbDownloadUrl, tmpPath, &httpStatus))
 		{
 			bool isPdb = false;
 			FILE* vf = _wfopen(tmpPath, L"rb");
@@ -730,6 +785,12 @@ namespace rdebug {
 
 		if (!ok)
 			DeleteFileW(tmpPath);
+
+		// Remember a definitive "not found" (HTTP 4xx) so we don't re-request it next load. A
+		// transient error (no connection, 5xx) leaves no marker, so it's retried normally.
+		if (!ok && (httpStatus >= 400) && (httpStatus < 500))
+			writeMissMarker(cachePdbPath);
+
 		return ok;
 	}
 
@@ -945,6 +1006,14 @@ namespace rdebug {
 						return true;
 					}
 
+					// Negative-cache hit: the server already returned "not found" for this module.
+					// Skip the (repeating) network round-trip; the prefetch left this marker.
+					if (negativeCacheHit(cachePdbPath))
+					{
+						pIDiaDataSource->Release();
+						return false;
+					}
+
 					// Create the parent directory (<cache>\<pdb>\<GUID><AGE>).
 					wchar_t parentDir[8 * 1024];
 					wideCopyBounded(parentDir, RTM_NUM_ELEMENTS(parentDir), cachePdbPath);
@@ -970,7 +1039,8 @@ namespace rdebug {
 						rdebugReportStatus(statusMsg);
 					}
 
-					if (downloadUrlToFile(pdbDownloadUrl, tmpPath))
+					DWORD httpStatus = 0;
+					if (downloadUrlToFile(pdbDownloadUrl, tmpPath, &httpStatus))
 					{
 						// Verify it's really a PDB (MSF 7.0 magic) and not, say, an HTML error
 						// page returned with a 200 by a proxy/captive portal - otherwise we'd
@@ -999,6 +1069,12 @@ namespace rdebug {
 					}
 
 					DeleteFileW(tmpPath);
+
+					// Remember a definitive "not found" (HTTP 4xx) so this module isn't re-requested
+					// on every load (a transient/5xx/no-connection error leaves no marker).
+					if ((httpStatus >= 400) && (httpStatus < 500))
+						writeMissMarker(cachePdbPath);
+
 					rtm::WideToMulti urlMb(pdbDownloadUrl);
 					rtm::Console::warning("Symbols: PDB download failed for '%s' (%s)\n", pdbNameMb.m_ptr, urlMb.m_ptr);
 					{
