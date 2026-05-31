@@ -383,6 +383,12 @@ uintptr_t symbolResolverCreate(ModuleInfo* _moduleInfos, uint32_t _numInfos, con
 		uint32_t hw = std::thread::hardware_concurrency();
 		if (hw == 0)
 			hw = 4;
+		// Symbol-server downloads are network I/O-bound, so a handful of concurrent transfers is the
+		// sweet spot; cap concurrency so a many-core box (e.g. an Unreal dev machine) doesn't spawn
+		// dozens of simultaneous connections (which the server throttles anyway).
+		const uint32_t kMaxDownloadThreads = 16;
+		if (hw > kMaxDownloadThreads)
+			hw = kMaxDownloadThreads;
 		const uint32_t threadCount = (_numInfos < hw) ? _numInfos : hw;
 
 		std::atomic<uint32_t> nextModule(0);

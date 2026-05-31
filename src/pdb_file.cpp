@@ -693,6 +693,16 @@ namespace rdebug {
 		tmpPath[RTM_NUM_ELEMENTS(tmpPath) - 1] = L'\0';
 		DeleteFileW(tmpPath);
 
+		// Log the module we're actually downloading a PDB for (only on a cache miss, so cached
+		// modules don't spam). Console uses a local buffer, so this is safe from the prefetch threads.
+		{
+			rtm::WideToMulti modMb(_moduleName);
+			const char* base = modMb.m_ptr;
+			for (const char* p = modMb.m_ptr; *p; ++p)
+				if ((*p == '\\') || (*p == '/')) base = p + 1;
+			rtm::Console::info("Symbols: downloading PDB for %s ...\n", base);
+		}
+
 		bool ok = false;
 		if (downloadUrlToFile(pdbDownloadUrl, tmpPath))
 		{
