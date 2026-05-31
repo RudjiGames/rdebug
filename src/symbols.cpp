@@ -413,6 +413,8 @@ uintptr_t symbolResolverCreate(ModuleInfo* _moduleInfos, uint32_t _numInfos, con
 	}
 #endif // RTM_PLATFORM_WINDOWS
 
+	resolver->m_modules.reserve(_numInfos);		// size once: no reallocations while modules are added below
+
 	for (uint32_t i=0; i<_numInfos; ++i)
 	{
 		Module module;
@@ -572,7 +574,7 @@ uintptr_t symbolResolverCreate(ModuleInfo* _moduleInfos, uint32_t _numInfos, con
 		resolver->m_modules.push_back(module);
 	}
 
-	std::sort(resolver->m_modules.m_data, resolver->m_modules.m_data + resolver->m_modules.size(),
+	std::sort(resolver->m_modules.data(), resolver->m_modules.data() + resolver->m_modules.size(),
 		[](const Module& a, const Module& b)
 		{
 			return a.m_module.m_baseAddress < b.m_module.m_baseAddress;
@@ -584,7 +586,7 @@ uintptr_t symbolResolverCreate(ModuleInfo* _moduleInfos, uint32_t _numInfos, con
 	// implementation on a Windows host (cross-toolchain GCC/PS captures), and each module owns
 	// its own resolver/map, so the work is embarrassingly parallel with no shared state.
 	{
-		const uint32_t moduleCount = resolver->m_modules.size();
+		const uint32_t moduleCount = (uint32_t)resolver->m_modules.size();
 		if (moduleCount > 1)
 		{
 			uint32_t hw = std::thread::hardware_concurrency();
@@ -777,7 +779,7 @@ inline const Module* addressGetModule(uintptr_t _resolver, uint64_t _address)
 	const Resolver* resolver = (Resolver*)_resolver;
 
 	int32_t minIndex = 0;
-	int32_t maxIndex = resolver->m_modules.size() - 1;
+	int32_t maxIndex = (int32_t)resolver->m_modules.size() - 1;
 
 	while (minIndex <= maxIndex)
 	{

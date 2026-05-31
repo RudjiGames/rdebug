@@ -9,6 +9,7 @@
 #include <rdebug/inc/rdebug.h>
 #include <rdebug/src/symbols_map.h>
 #include <rbase/inc/containers.h>
+#include <vector>
 
 class PDBFile;
 
@@ -66,9 +67,11 @@ struct Module
 
 struct Resolver
 {
-	static const uint32_t MAX_MODULES = 512;
+	static const uint32_t MAX_MODULES = 512;	// only the live-process enumerator's fixed buffer uses this
 
-	typedef rtm::FixedArray<Module, MAX_MODULES> ModuleArray;
+	// Dynamic: a capture's module list can far exceed MAX_MODULES (e.g. UnrealEditor loads well over
+	// 512 modules). A fixed array silently overflowed in release builds and corrupted memory.
+	typedef std::vector<Module> ModuleArray;
 
 	ModuleArray	m_modules;
 };
