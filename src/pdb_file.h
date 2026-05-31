@@ -17,6 +17,8 @@
 #include <windows.h>
 #include <comdef.h>
 #include <DIA/include/dia2.h>
+#include <map>
+#include <utility>
 
 class PDBFile
 {
@@ -26,6 +28,12 @@ class PDBFile
 		IDiaSession*		m_pIDiaSession;
 		IDiaSymbol*			m_pIDiaSymbol;
 		bool				m_isStripped;
+
+		// Function RVA-range -> symbol-index-ID cache. getSymbolID() answers any address inside an
+		// already-resolved function from this map instead of issuing another DIA findSymbolByVA -
+		// the per-address COM query was the dominant cost when generating unique symbol IDs for
+		// large captures. Keyed by function start RVA; value is {endRVA, symIndexId}.
+		std::map<uint64_t, std::pair<uint64_t, uint64_t> >	m_symbolRangeCache;
 
 	public:
 		PDBFile();

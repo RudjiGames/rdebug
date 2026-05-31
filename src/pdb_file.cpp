@@ -1057,6 +1057,7 @@ PDBFile::~PDBFile()
 
 void PDBFile::close()
 {
+	m_symbolRangeCache.clear();
 	if (m_pIDiaSymbol)
 	{
 		m_pIDiaSymbol->Release();
@@ -1226,21 +1227,45 @@ bool PDBFile::getSymbolByAddress(uint64_t _address, rdebug::StackFrame& _frame)
 
 uint64_t PDBFile::getSymbolID(uint64_t _address)
 {
-	DWORD ID = 0;
-	if (m_pIDiaSession)
+	if (!m_pIDiaSession)
+		return 0;
+
+	const uint64_t lookup = _address - 1;	// address of the previous instruction (the call site)
+
+	// Fast path: the call site falls inside a function we already resolved. This collapses every
+	// distinct return address within a function to a single DIA query - the original code issued
+	// one findSymbolByVA per unique address, which dominated load time on large captures.
+	if (!m_symbolRangeCache.empty())
 	{
-		IDiaSymbol* sym = nullptr;
-
-		_address -= 1;	// get address of previous instruction
-
-		if (!sym)	m_pIDiaSession->findSymbolByVA((ULONGLONG)_address, SymTagFunction, &sym);
-		if (!sym)	m_pIDiaSession->findSymbolByVA((ULONGLONG)_address, SymTagPublicSymbol, &sym);
-
-		if (sym)
+		std::map<uint64_t, std::pair<uint64_t, uint64_t> >::const_iterator it = m_symbolRangeCache.upper_bound(lookup);
+		if (it != m_symbolRangeCache.begin())
 		{
-			sym->get_symIndexId(&ID);
-			sym->Release();
+			--it;
+			if (lookup < it->second.first)	// within [startRVA, endRVA)
+				return it->second.second;
 		}
+	}
+
+	IDiaSymbol* sym = nullptr;
+	if (!sym)	m_pIDiaSession->findSymbolByVA((ULONGLONG)lookup, SymTagFunction, &sym);
+	if (!sym)	m_pIDiaSession->findSymbolByVA((ULONGLONG)lookup, SymTagPublicSymbol, &sym);
+
+	DWORD ID = 0;
+	if (sym)
+	{
+		sym->get_symIndexId(&ID);
+
+		// Cache the symbol's RVA range so subsequent addresses in the same function skip DIA.
+		// Only functions/symbols with a real extent are cached (public symbols often report 0).
+		DWORD		rva = 0;
+		ULONGLONG	len = 0;
+		if ((sym->get_relativeVirtualAddress(&rva) == S_OK) &&
+			(sym->get_length(&len) == S_OK) && (len > 0))
+		{
+			m_symbolRangeCache[(uint64_t)rva] = std::make_pair((uint64_t)rva + (uint64_t)len, (uint64_t)ID);
+		}
+
+		sym->Release();
 	}
 
 	return ID;
