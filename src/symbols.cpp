@@ -945,4 +945,105 @@ uint64_t symbolResolverGetAddressID(uintptr_t _resolver, uint64_t _address)
 		return _address;
 }
 
+void symbolResolverGetAddressIDs(uintptr_t _resolver, const uint64_t* _addresses, uint64_t* _outIDs, uint32_t _count, SymbolIDProgress _progress, void* _progressData)
+{
+	Resolver* resolver = (Resolver*)_resolver;
+	if (!resolver)
+	{
+		for (uint32_t i=0; i<_count; ++i)
+			_outIDs[i] = _addresses[i];
+		return;
+	}
+
+	const uint32_t moduleCount = (uint32_t)resolver->m_modules.size();
+
+	// Group address indices by module (binary search per address). Addresses outside any module get
+	// their address as the id (matches symbolResolverGetAddressID). Each module is then resolved by a
+	// single worker, so a module's symbol session + RVA-range cache are never touched concurrently.
+	std::vector<std::vector<uint32_t>> perModule(moduleCount ? moduleCount : 1);
+	std::atomic<uint64_t> resolved(0);		// addresses resolved so far, for progress
+	for (uint32_t i=0; i<_count; ++i)
+	{
+		const Module* m = addressGetModule(_resolver, _addresses[i]);
+		if (m)
+			perModule[(uint32_t)(m - resolver->m_modules.data())].push_back(i);
+		else
+		{
+			_outIDs[i] = _addresses[i];
+			resolved.fetch_add(1, std::memory_order_relaxed);	// no-module addresses are already done
+		}
+	}
+
+	if (moduleCount == 0)
+	{
+		if (_progress) _progress(_progressData, 100.0f);
+		return;
+	}
+
+	const float total = _count ? (float)_count : 1.0f;
+	auto resolveModule = [&](uint32_t _mi)
+	{
+		const std::vector<uint32_t>& idxs = perModule[_mi];
+		for (size_t k=0; k<idxs.size(); ++k)
+			_outIDs[idxs[k]] = symbolResolverGetAddressID(_resolver, _addresses[idxs[k]]);
+		resolved.fetch_add((uint32_t)idxs.size(), std::memory_order_relaxed);
+	};
+
+#if RTM_PLATFORM_WINDOWS
+	uint32_t hw = std::thread::hardware_concurrency();
+	if (hw == 0) hw = 4;
+	const uint32_t threadCount = (moduleCount < hw) ? moduleCount : hw;
+	if (threadCount > 1)
+	{
+		std::atomic<uint32_t> nextModule(0);
+		auto worker = [&](bool _report)
+		{
+			// DIA is COM; a freshly spawned worker has no COM apartment. Init MTA for this thread
+			// (the calling thread already has the host's apartment - CoInitializeEx then returns
+			// RPC_E_CHANGED_MODE, so only balance CoUninitialize when we actually initialized).
+			const HRESULT comHr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+			int lastPct = -1;
+			for (;;)
+			{
+				const uint32_t mi = nextModule.fetch_add(1);
+				if (mi >= moduleCount)
+					break;
+				resolveModule(mi);
+				// Progress is reported only from the calling thread (the host's UI/apartment); workers
+				// just advance the shared counter. Throttle to whole-percent steps.
+				if (_report && _progress)
+				{
+					const int pct = (int)(100.0f * (float)resolved.load(std::memory_order_relaxed) / total);
+					if (pct != lastPct) { _progress(_progressData, (float)pct); lastPct = pct; }
+				}
+			}
+			if (SUCCEEDED(comHr))
+				CoUninitialize();
+		};
+
+		std::vector<std::thread> pool;
+		pool.reserve(threadCount - 1);
+		for (uint32_t t=1; t<threadCount; ++t)
+			pool.emplace_back(worker, false);
+		worker(true);					// also resolve on the calling thread (and report progress)
+		for (size_t t=0; t<pool.size(); ++t)
+			pool[t].join();
+		if (_progress) _progress(_progressData, 100.0f);
+		return;
+	}
+#endif // RTM_PLATFORM_WINDOWS
+
+	int lastPct = -1;
+	for (uint32_t mi=0; mi<moduleCount; ++mi)
+	{
+		resolveModule(mi);
+		if (_progress)
+		{
+			const int pct = (int)(100.0f * (float)resolved.load(std::memory_order_relaxed) / total);
+			if (pct != lastPct) { _progress(_progressData, (float)pct); lastPct = pct; }
+		}
+	}
+	if (_progress) _progress(_progressData, 100.0f);
+}
+
 } // namespace rdebug

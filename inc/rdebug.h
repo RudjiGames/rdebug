@@ -128,6 +128,16 @@ namespace rdebug {
 	///
 	uint64_t symbolResolverGetAddressID(uintptr_t _resolver, uint64_t _address);
 
+	/// Progress callback for symbolResolverGetAddressIDs: _pct in [0,100]. Invoked only from the
+	/// calling thread (safe to touch host UI), never from worker threads.
+	typedef void (*SymbolIDProgress)(void* _data, float _pct);
+
+	/// Batch form of symbolResolverGetAddressID: resolves _count addresses into _outIDs. Internally
+	/// groups addresses by module and resolves modules in parallel (each module's symbol session is
+	/// driven by a single worker), which is far faster than serial per-address resolution on large
+	/// captures. _outIDs must have room for _count entries. _progress (optional) reports completion.
+	void symbolResolverGetAddressIDs(uintptr_t _resolver, const uint64_t* _addresses, uint64_t* _outIDs, uint32_t _count, SymbolIDProgress _progress = 0, void* _progressData = 0);
+
 	/// Returns true if binary at the given path is 64bit
 	///
 	/// @param _path
