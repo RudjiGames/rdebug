@@ -910,6 +910,84 @@ void symbolResolverGetFrame(uintptr_t _resolver, uint64_t _address, StackFrame* 
 	}
 }
 
+#if RTM_PLATFORM_WINDOWS
+// Case-insensitive ASCII substring (module file-name match for pdbGetTypeLayout).
+static bool striContains(const char* _hay, const char* _needle)
+{
+	if (!_hay || !_needle || !_needle[0]) return false;
+	auto lo = [](char c) -> char { return (c >= 'A' && c <= 'Z') ? (char)(c - 'A' + 'a') : c; };
+	for (const char* h = _hay; *h; ++h)
+	{
+		const char* a = h; const char* b = _needle;
+		while (*a && *b && (lo(*a) == lo(*b))) { ++a; ++b; }
+		if (!*b) return true;
+	}
+	return false;
+}
+#endif
+
+bool pdbGetTypeLayout(uintptr_t _resolver, const char* _moduleName, const char* _typeName,
+					  TypeLayout* _outLayout, type_member_cb _cb, void* _userData)
+{
+#if RTM_PLATFORM_WINDOWS
+	Resolver* resolver = (Resolver*)_resolver;
+	if (!resolver || !_moduleName || !_typeName || !_outLayout)
+		return false;
+
+	// First module whose file name contains _moduleName (case-insensitive).
+	Module* target = nullptr;
+	for (Module& m : resolver->m_modules)
+	{
+		const char* fn = rtm::pathGetFileName(m.m_module.m_modulePath);
+		if (fn && striContains(fn, _moduleName)) { target = &m; break; }
+	}
+	if (!target || !target->m_resolver)
+		return false;
+
+	// DIA is COM; give this thread an apartment (balanced only when we actually initialized), load the
+	// PDB on demand, then walk the type.
+	const HRESULT comHr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+	bool ok = false;
+	if (loadPDB(*target) && target->m_resolver->m_PDBFile)
+		ok = target->m_resolver->m_PDBFile->getTypeLayout(_typeName, *_outLayout, _cb, _userData);
+	if (SUCCEEDED(comHr))
+		CoUninitialize();
+	return ok;
+#else
+	(void)_resolver; (void)_moduleName; (void)_typeName; (void)_outLayout; (void)_cb; (void)_userData;
+	return false;
+#endif
+}
+
+uint32_t pdbEnumerateTypes(uintptr_t _resolver, const char* _moduleName, type_brief_cb _cb, void* _userData)
+{
+#if RTM_PLATFORM_WINDOWS
+	Resolver* resolver = (Resolver*)_resolver;
+	if (!resolver || !_moduleName || !_cb)
+		return 0;
+
+	Module* target = nullptr;
+	for (Module& m : resolver->m_modules)
+	{
+		const char* fn = rtm::pathGetFileName(m.m_module.m_modulePath);
+		if (fn && striContains(fn, _moduleName)) { target = &m; break; }
+	}
+	if (!target || !target->m_resolver)
+		return 0;
+
+	const HRESULT comHr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+	uint32_t count = 0;
+	if (loadPDB(*target) && target->m_resolver->m_PDBFile)
+		count = target->m_resolver->m_PDBFile->enumerateTypes(_cb, _userData);
+	if (SUCCEEDED(comHr))
+		CoUninitialize();
+	return count;
+#else
+	(void)_resolver; (void)_moduleName; (void)_cb; (void)_userData;
+	return 0;
+#endif
+}
+
 uint64_t symbolResolverGetAddressID(uintptr_t _resolver, uint64_t _address)
 {
 	Resolver* resolver = (Resolver*)_resolver;

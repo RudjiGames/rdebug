@@ -7,6 +7,10 @@
 #include <rdebug/src/pdb_file.h>
 #include <rdebug/src/symbols_types.h>
 #include <rbase/inc/console.h>
+#include <vector>
+#include <algorithm>
+#include <set>
+#include <string>
 
 #if RTM_PLATFORM_WINDOWS
 
@@ -1345,6 +1349,380 @@ uint64_t PDBFile::getSymbolID(uint64_t _address)
 	}
 
 	return ID;
+}
+
+//--------------------------------------------------------------------------
+// Type-layout extraction (Types analytics view). Walks a UDT's members + base subobjects from DIA and
+// synthesizes the padding gaps. See rdebug::pdbGetTypeLayout.
+//--------------------------------------------------------------------------
+
+// A fundamental type's spelling, from its DIA BasicType + byte length.
+static const char* diaBaseTypeName(DWORD _bt, uint32_t _len)
+{
+	switch (_bt)
+	{
+		case btVoid:	return "void";
+		case btChar:	return "char";
+		case btWChar:	return "wchar_t";
+		case btBool:	return "bool";
+		case btFloat:	return (_len == 4) ? "float" : (_len == 8 ? "double" : "long double");
+		case btHresult:	return "HRESULT";
+		case btInt:		return (_len==1)?"int8_t":(_len==2)?"short":(_len==8)?"int64_t":"int";
+		case btLong:	return "long";
+		case btUInt:	return (_len==1)?"uint8_t":(_len==2)?"unsigned short":(_len==8)?"uint64_t":"unsigned int";
+		case btULong:	return "unsigned long";
+		default:		return "?";
+	}
+}
+
+// Best-effort spelling of a DIA type symbol (UDT/enum/base/pointer/array/typedef). Bounded recursion.
+static void diaTypeName(IDiaSymbol* _type, char* _out, size_t _outSize, int _depth)
+{
+	_out[0] = 0;
+	if (!_type || _depth > 8) { rtm::strlCpy(_out, (int)_outSize, "?"); return; }
+
+	DWORD tag = 0;
+	_type->get_symTag(&tag);
+	switch (tag)
+	{
+		case SymTagUDT:
+		case SymTagEnum:
+		{
+			BSTR n = nullptr;
+			_type->get_name(&n);
+			if (n) { rtm::WideToMulti m(n); rtm::strlCpy(_out, (int)_outSize, m.m_ptr); SysFreeString(n); }
+			else rtm::strlCpy(_out, (int)_outSize, "<anon>");
+			break;
+		}
+		case SymTagBaseType:
+		{
+			DWORD bt = 0; ULONGLONG len = 0;
+			_type->get_baseType(&bt);
+			_type->get_length(&len);
+			rtm::strlCpy(_out, (int)_outSize, diaBaseTypeName(bt, (uint32_t)len));
+			break;
+		}
+		case SymTagPointerType:
+		{
+			IDiaSymbol* pointee = nullptr;
+			_type->get_type(&pointee);
+			char inner[1024];
+			diaTypeName(pointee, inner, sizeof(inner), _depth + 1);
+			if (pointee) pointee->Release();
+			BOOL ref = FALSE;
+			_type->get_reference(&ref);
+			_snprintf_s(_out, _outSize, _TRUNCATE, "%s%s", inner, ref ? "&" : "*");
+			break;
+		}
+		case SymTagArrayType:
+		{
+			IDiaSymbol* elem = nullptr;
+			_type->get_type(&elem);
+			char inner[1024];
+			diaTypeName(elem, inner, sizeof(inner), _depth + 1);
+			if (elem) elem->Release();
+			DWORD count = 0;
+			_type->get_count(&count);
+			_snprintf_s(_out, _outSize, _TRUNCATE, "%s[%u]", inner, (unsigned)count);
+			break;
+		}
+		case SymTagTypedef:
+		{
+			IDiaSymbol* ul = nullptr;
+			_type->get_type(&ul);
+			diaTypeName(ul, _out, _outSize, _depth + 1);
+			if (ul) ul->Release();
+			break;
+		}
+		default:
+		{
+			BSTR n = nullptr;
+			_type->get_name(&n);
+			if (n) { rtm::WideToMulti m(n); rtm::strlCpy(_out, (int)_outSize, m.m_ptr); SysFreeString(n); }
+			else rtm::strlCpy(_out, (int)_outSize, "?");
+			break;
+		}
+	}
+}
+
+// Best-effort natural alignment of a member of the given size: the largest power of two that divides it
+// (a 24-byte std::vector aligns to 8, a 16-byte SIMD type to 16), capped at 16 to avoid over-alignment
+// surprises. DIA has no reliable per-member alignment, so the type's alignment is the max of these.
+static uint32_t alignFromSize(uint32_t _sz)
+{
+	if (_sz == 0) return 1;
+	const uint32_t a = _sz & (uint32_t)(~_sz + 1);	// lowest set bit = largest power of two dividing _sz
+	return (a > 16) ? 16 : a;
+}
+
+bool PDBFile::getTypeLayout(const char* _typeName, rdebug::TypeLayout& _outLayout, rdebug::type_member_cb _cb, void* _userData)
+{
+	memset(&_outLayout, 0, sizeof(_outLayout));
+	if (!m_pIDiaSession || !m_pIDiaSymbol || !_typeName)
+		return false;
+
+	rtm::MultiToWide wname(_typeName, false);	// not a path - don't canonicalize
+
+	// Find the UDT in the global scope: try exact, then case-insensitive.
+	IDiaEnumSymbols* udtEnum = nullptr;
+	if (FAILED(m_pIDiaSymbol->findChildren(SymTagUDT, wname.m_ptr, nsCaseSensitive, &udtEnum)) || !udtEnum)
+		return false;
+
+	IDiaSymbol* udt = nullptr;
+	ULONG celt = 0;
+	udtEnum->Next(1, &udt, &celt);
+	udtEnum->Release();
+	if (!udt || celt != 1)
+	{
+		if (udt) udt->Release();
+		if (FAILED(m_pIDiaSymbol->findChildren(SymTagUDT, wname.m_ptr, nsCaseInsensitive, &udtEnum)) || !udtEnum)
+			return false;
+		udt = nullptr; celt = 0;
+		udtEnum->Next(1, &udt, &celt);
+		udtEnum->Release();
+		if (!udt || celt != 1) { if (udt) udt->Release(); return false; }
+	}
+
+	ULONGLONG length = 0; DWORD udtKind = 0;
+	udt->get_length(&length);
+	udt->get_udtKind(&udtKind);
+	{
+		BSTR n = nullptr; udt->get_name(&n);
+		if (n) { rtm::WideToMulti m(n); rtm::strlCpy(_outLayout.m_name, RTM_NUM_ELEMENTS(_outLayout.m_name), m.m_ptr); SysFreeString(n); }
+	}
+	_outLayout.m_size    = (uint32_t)length;
+	_outLayout.m_udtKind = (uint8_t)udtKind;	// UdtStruct=0, UdtClass=1, UdtUnion=2, UdtInterface=3
+
+	std::vector<rdebug::TypeMember> rows;
+
+	// Base-class subobjects: they occupy layout space [offset, offset+size).
+	IDiaEnumSymbols* baseEnum = nullptr;
+	if (SUCCEEDED(udt->findChildren(SymTagBaseClass, nullptr, nsNone, &baseEnum)) && baseEnum)
+	{
+		IDiaSymbol* base = nullptr;
+		while (SUCCEEDED(baseEnum->Next(1, &base, &celt)) && (celt == 1))
+		{
+			LONG off = 0; ULONGLONG blen = 0;
+			base->get_offset(&off);
+			base->get_length(&blen);
+			rdebug::TypeMember m; memset(&m, 0, sizeof(m));
+			m.m_kind   = rdebug::TypeMember::Base;
+			m.m_offset = (uint32_t)(off < 0 ? 0 : off);
+			m.m_size   = (uint32_t)blen;
+			diaTypeName(base, m.m_typeName, sizeof(m.m_typeName), 0);
+			rtm::strlCpy(m.m_name, RTM_NUM_ELEMENTS(m.m_name), m.m_typeName);
+			rows.push_back(m);
+			base->Release();
+		}
+		baseEnum->Release();
+	}
+
+	// Data members (instance fields only; skip statics).
+	IDiaEnumSymbols* dataEnum = nullptr;
+	if (SUCCEEDED(udt->findChildren(SymTagData, nullptr, nsNone, &dataEnum)) && dataEnum)
+	{
+		IDiaSymbol* data = nullptr;
+		while (SUCCEEDED(dataEnum->Next(1, &data, &celt)) && (celt == 1))
+		{
+			DWORD dataKind = 0, locType = 0;
+			data->get_dataKind(&dataKind);
+			data->get_locationType(&locType);
+			if ((dataKind != DataIsMember) || ((locType != LocIsThisRel) && (locType != LocIsBitField)))
+			{
+				data->Release();		// static member, constant, etc. - not part of the instance layout
+				continue;
+			}
+
+			LONG off = 0;
+			data->get_offset(&off);
+
+			IDiaSymbol* mtype = nullptr;
+			data->get_type(&mtype);
+			ULONGLONG tlen = 0;
+			if (mtype) mtype->get_length(&tlen);
+
+			rdebug::TypeMember m; memset(&m, 0, sizeof(m));
+			m.m_offset = (uint32_t)(off < 0 ? 0 : off);
+			m.m_size   = (uint32_t)tlen;
+			if (locType == LocIsBitField)
+			{
+				DWORD bitPos = 0; ULONGLONG bits = 0;
+				data->get_bitPosition(&bitPos);
+				data->get_length(&bits);		// for a bitfield, the data symbol's length is the bit count
+				m.m_kind      = rdebug::TypeMember::Bitfield;
+				m.m_bitOffset = (uint8_t)bitPos;
+				m.m_bitWidth  = (uint8_t)bits;
+			}
+			else
+				m.m_kind = rdebug::TypeMember::Field;
+
+			if (mtype) { diaTypeName(mtype, m.m_typeName, sizeof(m.m_typeName), 0); mtype->Release(); }
+			BSTR n = nullptr; data->get_name(&n);
+			if (n) { rtm::WideToMulti mm(n); rtm::strlCpy(m.m_name, RTM_NUM_ELEMENTS(m.m_name), mm.m_ptr); SysFreeString(n); }
+			rows.push_back(m);
+			data->Release();
+		}
+		dataEnum->Release();
+	}
+
+	udt->Release();
+
+	// Stable order by offset (bases naturally precede members; ties keep discovery order).
+	std::stable_sort(rows.begin(), rows.end(),
+		[](const rdebug::TypeMember& a, const rdebug::TypeMember& b) { return a.m_offset < b.m_offset; });
+
+	// Best-effort alignment: the largest member alignment, then clamped to a power of two that actually
+	// divides the type size (sizeof is always a multiple of alignof) - this corrects composite members
+	// like std::string (32 B but 8-aligned) whose size overstates their alignment.
+	uint32_t maxMemberAlign = 1;
+	for (const rdebug::TypeMember& m : rows)
+	{
+		const uint32_t ma = alignFromSize(m.m_size);
+		if (ma > maxMemberAlign) maxMemberAlign = ma;
+	}
+	uint32_t structAlign = maxMemberAlign;
+	while ((structAlign > 1) && _outLayout.m_size && (_outLayout.m_size % structAlign))
+		structAlign >>= 1;
+	_outLayout.m_align = structAlign ? structAlign : 1;
+
+	const bool isUnion = (udtKind == UdtUnion);
+
+	// Emit rows in offset order, synthesizing padding gaps (skipped for unions, whose members overlap).
+	uint32_t cursor = 0, paddingTotal = 0;
+	for (const rdebug::TypeMember& m : rows)
+	{
+		if (!isUnion && (m.m_offset > cursor))
+		{
+			rdebug::TypeMember pad; memset(&pad, 0, sizeof(pad));
+			pad.m_kind   = rdebug::TypeMember::Padding;
+			pad.m_offset = cursor;
+			pad.m_size   = m.m_offset - cursor;
+			paddingTotal += pad.m_size;
+			if (_cb) _cb(&pad, _userData);
+		}
+		if (_cb) _cb(&m, _userData);
+		const uint32_t end = m.m_offset + m.m_size;
+		if (end > cursor) cursor = end;
+	}
+	// Tail padding.
+	if (!isUnion && (cursor < _outLayout.m_size))
+	{
+		rdebug::TypeMember pad; memset(&pad, 0, sizeof(pad));
+		pad.m_kind   = rdebug::TypeMember::Padding;
+		pad.m_offset = cursor;
+		pad.m_size   = _outLayout.m_size - cursor;
+		paddingTotal += pad.m_size;
+		if (_cb) _cb(&pad, _userData);
+	}
+	_outLayout.m_paddingTotal = isUnion ? 0 : paddingTotal;
+	return true;
+}
+
+// Total padding bytes in a UDT's layout (member/base gaps + tail), without building the full member list.
+// Mirrors the padding synthesis in getTypeLayout; used by enumerateTypes so the type index can be sorted
+// by padding. Unions have overlapping members -> 0.
+static uint32_t udtPaddingTotal(IDiaSymbol* _udt, uint32_t _size, DWORD _udtKind)
+{
+	if (_udtKind == UdtUnion)
+		return 0;
+
+	std::vector<std::pair<uint32_t, uint32_t> > iv;	// (offset, size) of bases + data members
+	ULONG celt = 0;
+
+	IDiaEnumSymbols* be = nullptr;
+	if (SUCCEEDED(_udt->findChildren(SymTagBaseClass, nullptr, nsNone, &be)) && be)
+	{
+		IDiaSymbol* b = nullptr;
+		while (SUCCEEDED(be->Next(1, &b, &celt)) && (celt == 1))
+		{
+			LONG off = 0; ULONGLONG len = 0;
+			b->get_offset(&off);
+			b->get_length(&len);
+			if (len > 0) iv.push_back(std::make_pair((uint32_t)(off < 0 ? 0 : off), (uint32_t)len));
+			b->Release();
+		}
+		be->Release();
+	}
+
+	IDiaEnumSymbols* de = nullptr;
+	if (SUCCEEDED(_udt->findChildren(SymTagData, nullptr, nsNone, &de)) && de)
+	{
+		IDiaSymbol* d = nullptr;
+		while (SUCCEEDED(de->Next(1, &d, &celt)) && (celt == 1))
+		{
+			DWORD dk = 0, lt = 0;
+			d->get_dataKind(&dk);
+			d->get_locationType(&lt);
+			if ((dk == DataIsMember) && ((lt == LocIsThisRel) || (lt == LocIsBitField)))
+			{
+				LONG off = 0;
+				d->get_offset(&off);
+				IDiaSymbol* t = nullptr; ULONGLONG tl = 0;
+				d->get_type(&t);
+				if (t) { t->get_length(&tl); t->Release(); }
+				iv.push_back(std::make_pair((uint32_t)(off < 0 ? 0 : off), (uint32_t)tl));
+			}
+			d->Release();
+		}
+		de->Release();
+	}
+
+	std::sort(iv.begin(), iv.end(),
+		[](const std::pair<uint32_t,uint32_t>& a, const std::pair<uint32_t,uint32_t>& b) { return a.first < b.first; });
+
+	uint32_t cursor = 0, pad = 0;
+	for (const std::pair<uint32_t,uint32_t>& m : iv)
+	{
+		if (m.first > cursor) pad += m.first - cursor;
+		const uint32_t end = m.first + m.second;
+		if (end > cursor) cursor = end;
+	}
+	if (cursor < _size) pad += _size - cursor;
+	return pad;
+}
+
+uint32_t PDBFile::enumerateTypes(rdebug::type_brief_cb _cb, void* _userData)
+{
+	if (!m_pIDiaSymbol || !_cb)
+		return 0;
+
+	IDiaEnumSymbols* udtEnum = nullptr;
+	if (FAILED(m_pIDiaSymbol->findChildren(SymTagUDT, nullptr, nsNone, &udtEnum)) || !udtEnum)
+		return 0;
+
+	// PDBs list the same UDT once per compiland that references it; de-dup by name and keep only the
+	// first sized definition (forward declarations report length 0 and have no layout).
+	std::set<std::string> seen;
+	uint32_t emitted = 0;
+	IDiaSymbol* udt = nullptr;
+	ULONG celt = 0;
+	while (SUCCEEDED(udtEnum->Next(1, &udt, &celt)) && (celt == 1))
+	{
+		ULONGLONG len = 0;
+		udt->get_length(&len);
+		BSTR n = nullptr;
+		udt->get_name(&n);
+		if (n && (len > 0))
+		{
+			rtm::WideToMulti name(n);
+			if (name.m_ptr && name.m_ptr[0] && seen.insert(name.m_ptr).second)
+			{
+				DWORD udtKind = 0;
+				udt->get_udtKind(&udtKind);
+				rdebug::TypeBrief tb;
+				rtm::strlCpy(tb.m_name, RTM_NUM_ELEMENTS(tb.m_name), name.m_ptr);
+				tb.m_size         = (uint32_t)len;
+				tb.m_paddingTotal = udtPaddingTotal(udt, (uint32_t)len, udtKind);
+				tb.m_udtKind      = (uint8_t)udtKind;
+				_cb(&tb, _userData);
+				++emitted;
+			}
+		}
+		if (n) SysFreeString(n);
+		udt->Release();
+	}
+	udtEnum->Release();
+	return emitted;
 }
 
 bool PDBFile::loadSymbolsFileWithoutValidation(const wchar_t* _PdbFileName)

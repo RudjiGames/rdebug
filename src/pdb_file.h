@@ -43,6 +43,8 @@ class PDBFile
 		bool		isLoaded() const;
 		bool		getSymbolByAddress(uint64_t _address, rdebug::StackFrame& _frame);
 		uint64_t	getSymbolID(uint64_t _address);
+		bool		getTypeLayout(const char* _typeName, rdebug::TypeLayout& _outLayout, rdebug::type_member_cb _cb, void* _userData);
+		uint32_t	enumerateTypes(rdebug::type_brief_cb _cb, void* _userData);
 		void		close();
 
 	private:

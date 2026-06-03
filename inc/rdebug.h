@@ -171,8 +171,65 @@ namespace rdebug {
 	///
 	void processReleaseOutput(const char* _output);
 
-	/// 
+	///
 	void addressToString(uint64_t _address, char* _buffer);
+
+	//----------------------------------------------------------------------//
+	/// Type (struct/class/union) layout from PDB debug info. Used by the Types analytics view to show
+	/// member layout + padding. Windows/MSVC (DIA) only; other toolchains return false.
+	//----------------------------------------------------------------------//
+
+	/// One row in a type's layout: a data member, a base-class subobject, or a synthesized padding gap.
+	struct TypeMember
+	{
+		enum Kind { Field, Base, Bitfield, Padding };
+
+		char		m_name[1024];		///< member name; "" for padding rows
+		char		m_typeName[1024];	///< member/base type spelled out; "" for padding rows
+		uint32_t	m_offset;			///< byte offset within the enclosing type
+		uint32_t	m_size;			///< size in bytes (for a bitfield: the storage-unit size)
+		uint8_t		m_kind;			///< TypeMember::Kind
+		uint8_t		m_bitOffset;		///< first bit (bitfields only)
+		uint8_t		m_bitWidth;		///< width in bits (bitfields only)
+	};
+
+	/// Summary of a type's layout. Members (incl. synthesized padding rows) arrive via the callback.
+	struct TypeLayout
+	{
+		char		m_name[1024];
+		uint32_t	m_size;			///< sizeof, from the PDB
+		uint32_t	m_align;			///< best-effort alignment (largest member alignment)
+		uint32_t	m_paddingTotal;		///< total padding bytes (0 for unions)
+		uint8_t		m_udtKind;			///< 0=struct, 1=class, 2=union, 3=interface (DIA UdtKind)
+	};
+
+	/// Per-member visitor for pdbGetTypeLayout - fired in offset order with padding rows interleaved.
+	typedef void (*type_member_cb)(const TypeMember* _member, void* _userData);
+
+	/// Resolve a type's layout (members, base subobjects, padding) from a module's PDB. _moduleName is
+	/// matched against the module file name (case-insensitive substring). Loads the module's PDB on
+	/// demand and is self-contained re: COM (safe to call on any thread). Returns false if the module,
+	/// its PDB, or the type can't be found, or on non-MSVC toolchains.
+	bool pdbGetTypeLayout(uintptr_t _resolver, const char* _moduleName, const char* _typeName,
+						  TypeLayout* _outLayout, type_member_cb _cb, void* _userData);
+
+	/// One entry in a module's type index: just enough to list + search types cheaply (full layout is
+	/// fetched on demand with pdbGetTypeLayout).
+	struct TypeBrief
+	{
+		char		m_name[1024];
+		uint32_t	m_size;			///< sizeof
+		uint32_t	m_paddingTotal;		///< total padding bytes in the layout (0 for unions)
+		uint8_t		m_udtKind;			///< 0=struct, 1=class, 2=union, 3=interface
+	};
+
+	typedef void (*type_brief_cb)(const TypeBrief* _type, void* _userData);
+
+	/// Enumerate the named UDTs (struct/class/union) defined in a module's PDB - name + size only, for a
+	/// searchable type list. De-duplicated by name; zero-sized / anonymous types are skipped. Potentially
+	/// slow on large PDBs (call off the UI thread). Loads the PDB on demand, self-contained re: COM.
+	/// Returns the number of types emitted (0 on failure / non-MSVC).
+	uint32_t pdbEnumerateTypes(uintptr_t _resolver, const char* _moduleName, type_brief_cb _cb, void* _userData);
 
 } // namespace rdebug
 
