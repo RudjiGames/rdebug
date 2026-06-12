@@ -490,9 +490,7 @@ uintptr_t symbolResolverCreate(ModuleInfo* _moduleInfos, uint32_t _numInfos, con
 
 		std::string quote;
 
-		if ((module.m_module.m_toolchain.m_type == rdebug::Toolchain::GCC) ||
-			(module.m_module.m_toolchain.m_type == rdebug::Toolchain::PS4) ||
-			(module.m_module.m_toolchain.m_type == rdebug::Toolchain::PS5))
+		if (module.m_module.m_toolchain.m_type == rdebug::Toolchain::GCC)
 		{
 			if (module.m_module.m_toolchain.m_type == rdebug::Toolchain::GCC)
 				quote = "\"";
@@ -504,19 +502,6 @@ uintptr_t symbolResolverCreate(ModuleInfo* _moduleInfos, uint32_t _numInfos, con
 			append_a2l = "\" -f -e " + quote;
 			append_a2l += moduleBinary;
 			append_a2l += quote + " 0x%llx";	// 64-bit: %x truncated 64-bit (e.g. mingw64) addresses
-
-			append_cppf = "\" -t -n ";
-		}
-
-		if (module.m_module.m_toolchain.m_type == rdebug::Toolchain::PS3SNC)
-		{
-			append_nm = "\" -dsy \"";
-			append_nm += moduleBinary;
-			append_nm += "\"";
-
-			append_a2l = "\" -a2l 0x%llx -i \"";
-			append_a2l += moduleBinary;
-			append_a2l += "\"";
 
 			append_cppf = "\" -t -n ";
 		}
@@ -541,23 +526,12 @@ uintptr_t symbolResolverCreate(ModuleInfo* _moduleInfos, uint32_t _numInfos, con
 			break;
 
 		case rdebug::Toolchain::GCC:
-		case rdebug::Toolchain::PS4:
-		case rdebug::Toolchain::PS5:
 			module.m_resolver->m_parseSym		= parseAddr2LineSymbolInfo;
 			module.m_resolver->m_parseSymMap	= parseSymbolMapGNU;
 			module.m_resolver->m_symbolStore	= 0;
 			module.m_resolver->m_tc_addr2line	= module.m_resolver->scratch((quote + module.m_module.m_toolchain.m_toolchainPath + module.m_module.m_toolchain.m_toolchainPrefix + "addr2line" + append_a2l).c_str());
 			module.m_resolver->m_tc_nm			= module.m_resolver->scratch((quote + module.m_module.m_toolchain.m_toolchainPath + module.m_module.m_toolchain.m_toolchainPrefix + "nm" + append_nm).c_str());
 			module.m_resolver->m_tc_cppfilt		= module.m_resolver->scratch((quote + module.m_module.m_toolchain.m_toolchainPath + module.m_module.m_toolchain.m_toolchainPrefix + "c++filt" + append_cppf).c_str());
-			break;
-
-		case rdebug::Toolchain::PS3SNC:
-			module.m_resolver->m_parseSym		= parsePlayStationSymbolInfo;
-			module.m_resolver->m_parseSymMap	= parseSymbolMapPS3;
-			module.m_resolver->m_symbolStore	= 0;
-			module.m_resolver->m_tc_addr2line	= module.m_resolver->scratch((quote + module.m_module.m_toolchain.m_toolchainPath + module.m_module.m_toolchain.m_toolchainPrefix + "ps3bin" + append_a2l).c_str());
-			module.m_resolver->m_tc_nm			= module.m_resolver->scratch((quote + module.m_module.m_toolchain.m_toolchainPath + module.m_module.m_toolchain.m_toolchainPrefix + "ps3bin" + append_nm).c_str());
-			module.m_resolver->m_tc_cppfilt		= module.m_resolver->scratch((quote + module.m_module.m_toolchain.m_toolchainPath + module.m_module.m_toolchain.m_toolchainPrefix + "ps3name" + append_cppf).c_str());
 			break;
 
 		case rdebug::Toolchain::Unknown:

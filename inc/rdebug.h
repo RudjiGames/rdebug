@@ -19,10 +19,7 @@ namespace rdebug {
 		{
 			Unknown,	// 
 			MSVC,		// pdb
-			GCC,		// nm, addr2line, c++filt
-			PS4,		// 
-			PS5,		// 
-			PS3SNC		// ps3bin
+			GCC			// nm, addr2line, c++filt
 		};
 
 		Toolchain::Type	m_type;
